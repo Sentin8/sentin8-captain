@@ -594,7 +594,6 @@ unsafe fn kill_signal(pid: u32, sig: i32) -> i32 {
 /// {"source":"self","metric":"log.errors.sentin8-auth","value":,...},
 /// {"source":"self","metric":"log.warnings.sentin8-auth","value":,...}
 /// ]}`
-///
 /// The subscriber processes both metric types:
 /// - `proxy.traffic.{from}→{to}.count` → sums per `to` service → overwrites `api_calls`
 /// - `log.errors.{service}` / `log.warnings.{service}` → overwrites `errors`/`warnings`

@@ -346,7 +346,6 @@ fn normalize_service_type(token: &str) -> String {
 /// 30 = storage, db, post, cron, stat, func, flow (middleware)
 /// 40 = app (business)
 /// 50 = bff, web (gateway, web apps)
-///
 /// Captain does NOT supervise DB (PostgreSQL), Valkey, or object storage
 /// those are infrastructure and must be up before Captain starts.
 /// The default Sentin8 service catalog (the platform's spawn truth — the
