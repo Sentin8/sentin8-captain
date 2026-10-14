@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: Copyright Logically Magic Inc. <hello@logicallymagic.com>
+# SPDX-FileCopyrightText: Copyright Hamid Jahanzad <Hamid@Jahanzad.com>
+# SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sentin8-captain"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Sentin8/sentin8-captain"
+rust-version = "1.85"
+description = "Sentin8:Captain — process supervisor & orchestration layer. A starter: builds and boots before any service (RS §2.5)."
+
+[[bin]]
+name = "sentin8-captain"
+path = "src/main.rs"
+
+[lib]
+name = "sentin8_captain_server"
+path = "src/lib.rs"
+
+[dependencies]
+# ── THE SDK pin (RS §2.3) — the only cross-repo dependency ──
+sentin8 = { git = "https://github.com/Sentin8/sentin8-sdk", tag = "sdk-v0.6.3" }
+
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.7", features = ["trace", "cors", "compression-gzip", "limit"] }
+hyper = { version = "1", features = ["full"] }
+# Local control channel (§6.1.2): UDS accept loop serves the router via a
+# hand-rolled hyper connection loop; tokio-stream wraps the listener.
+hyper-util = { version = "0.1", features = ["server", "http1", "tokio"] }
+http-body-util = "0.1"
+tokio-stream = "0.1"
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring", "postgres", "uuid", "chrono", "json", "macros"] }
+# Valkey GLIDE — the platform's mandated client engine (group DESIGN.md §3.1).
+valkey-glide = "0.9.0"
+dotenvy = "0.15"
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1"
+anyhow = "1"
+async-stream = "0.3"
+futures-util = "0.3"
+reqwest = { version = "0.12", features = ["json", "rustls-tls-native-roots-no-provider"], default-features = false }
+rand = "0.8"
+async-trait = "0.1"

@@ -1,0 +1,10 @@
+{
+  "vertical": "sentin8",
+  "services": [
+    {
+      "service_type": "sentin8:captain",
+      "subdomain": "captain",
+      "binary": "sentin8-captain"
+    }
+  ]
+}
