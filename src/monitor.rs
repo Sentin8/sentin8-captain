@@ -13,7 +13,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Duration;
 
-
 use crate::config::CaptainConfig;
 use crate::{health, procfs, store, supervisor};
 
@@ -610,7 +609,9 @@ fn spawn_rollup_metrics_subscriber(
     let valkey_url = config.valkey_url.clone();
     let local_ip = config.local_ip.clone();
     tokio::spawn(async move {
-        let client = match sentin8::middleware::valkey_client_pubsub(&valkey_url, "sentin8:captain").await {
+        let client = match sentin8::middleware::valkey_client_pubsub(&valkey_url, "sentin8:captain")
+            .await
+        {
             Ok(c) => c,
             Err(e) => {
                 tracing::warn!(error = %e, "monitor: failed to open Valkey client for rollup metrics");
@@ -689,13 +690,9 @@ fn spawn_rollup_metrics_subscriber(
                 for (service_name, (api_calls, errors, warnings)) in &service_counts {
                     if live_catalog.read().unwrap().contains_key(service_name) {
                         if *api_calls > 0 {
-                            let _ = store::set_api_calls(
-                                &conn,
-                                &local_ip,
-                                service_name,
-                                *api_calls,
-                            )
-                            .await;
+                            let _ =
+                                store::set_api_calls(&conn, &local_ip, service_name, *api_calls)
+                                    .await;
                         }
                         // Error/warning counts from Stat's rollups are
                         // **snapshots** (rolling 24-hour aggregates), not
@@ -783,7 +780,11 @@ fn spawn_daily_reset(conn: glide::GlideClient, config: CaptainConfig) {
 /// regular monitor path). 0 disables. The respawn rides the same
 /// supervisor spawn path as any start (fresh registry row at a fresh
 /// port) — never a manual process launch.
-fn spawn_last_resort_respawner(conn: glide::GlideClient, config: CaptainConfig, live_catalog: Arc<RwLock<HashMap<String, crate::catalog::ServiceCatalogEntry>>>) {
+fn spawn_last_resort_respawner(
+    conn: glide::GlideClient,
+    config: CaptainConfig,
+    live_catalog: Arc<RwLock<HashMap<String, crate::catalog::ServiceCatalogEntry>>>,
+) {
     if config.last_resort_respawn_s <= 0 {
         return;
     }
@@ -793,24 +794,32 @@ fn spawn_last_resort_respawner(conn: glide::GlideClient, config: CaptainConfig, 
             if SHUTTING_DOWN.load(Ordering::SeqCst) {
                 return;
             }
-            let mut c = conn.clone();
-            let Ok(alerts) = store::list_alerts(&mut c).await else {
+            let c = conn.clone();
+            let Ok(alerts) = store::list_alerts(&c).await else {
                 continue;
             };
             for (_svc, alert) in alerts {
                 // Already running? (a previous respawn succeeded but the
                 // alert was never cleared, or another instance exists.)
-                let existing = store::list_all(&mut c)
+                let existing = store::list_all(&c)
                     .await
                     .map(|v| {
-                        v.iter()
-                            .any(|i| i.service_type == alert.service_type && i.status != "Stopped" && i.status != "Killed")
+                        v.iter().any(|i| {
+                            i.service_type == alert.service_type
+                                && i.status != "Stopped"
+                                && i.status != "Killed"
+                        })
                     })
                     .unwrap_or(false);
                 if existing {
                     continue;
                 }
-                let Some(entry) = live_catalog.read().unwrap().get(&alert.service_type).cloned() else {
+                let Some(entry) = live_catalog
+                    .read()
+                    .unwrap()
+                    .get(&alert.service_type)
+                    .cloned()
+                else {
                     continue;
                 };
                 tracing::warn!(
@@ -819,7 +828,7 @@ fn spawn_last_resort_respawner(conn: glide::GlideClient, config: CaptainConfig, 
                     "captain: last-resort respawn attempt for an alerted service"
                 );
                 if let Err(e) = crate::handlers::spawn_one_service(
-                    &mut c,
+                    &c,
                     &config.local_ip,
                     config.port_range,
                     &alert.service_type,

@@ -24,7 +24,6 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
-
 use crate::config::CaptainConfig;
 use crate::store::{self, ServiceInstance};
 use crate::supervisor;
@@ -143,12 +142,9 @@ pub async fn evaluate(
                     })
                     .collect();
                 let fleet_obs: Vec<crate::placement::ObservedInstance> = local_obs.clone();
-                if let Err(refusal) = crate::placement::placement_admits(
-                    e,
-                    &config.local_ip,
-                    &local_obs,
-                    &fleet_obs,
-                ) {
+                if let Err(refusal) =
+                    crate::placement::placement_admits(e, &config.local_ip, &local_obs, &fleet_obs)
+                {
                     tracing::debug!(
                         service = %service_type,
                         placement = %e.placement,

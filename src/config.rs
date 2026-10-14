@@ -95,14 +95,12 @@ pub struct CaptainConfig {
     pub port_range: (u16, u16),
     /// Machine auto-provisioning profile. `Auto` (default)
     /// enables the cluster-autoscaler role up to `MAX_MACHINES` with cooldown
-    /// + scale-in — with the default `noop` backend that is a dry-run.
+    /// and scale-in — with the default `noop` backend that is a dry-run.
     /// `Manual` requires operator approval; `Never` disables the role.
-    /// The provision profile.
     pub provision_profile: crate::provision::ProvisionProfile,
     /// Provisioner backend selector. `noop` (default) is
     /// dry-run; `cloud`/`hypervisor`/`bare-metal` all execute OpenTofu
     /// (`tofu apply`) against the module dir `SENTIN8_CAPTAIN_TOFU_DIR`.
-    /// The provision backend.
     pub provision_backend: String,
     /// Fleet-wide machine cap — the autoscaler never provisions beyond this.
     /// Maximum machines.
@@ -129,7 +127,7 @@ impl CaptainConfig {
             std::env::var("VALKEY_URL")
                 .ok()
                 .filter(|s| !s.trim().is_empty())
-                .unwrap_or_else(|| sentin8::config::service_valkey_url())
+                .unwrap_or_else(sentin8::config::service_valkey_url)
         });
 
         let mut catalog = default_catalog();
@@ -202,14 +200,14 @@ impl CaptainConfig {
         // `sentin8_subdomain`.
         let labels: Vec<String> = catalog
             .values()
-            .filter_map(|e| {
+            .map(|e| {
                 let sub = e
                     .extra_env
                     .get("sentin8_subdomain")
                     .cloned()
                     .filter(|s| !s.is_empty())
                     .unwrap_or_else(|| sentin8::config::service_dash_form(&e.service_type));
-                Some(format!("{sub}:{}", e.service_type))
+                format!("{sub}:{}", e.service_type)
             })
             .collect();
         if !labels.is_empty() {
@@ -313,53 +311,11 @@ impl CaptainConfig {
 /// - Canonical: `sentin8:auth`, `bank8:ledger`, `bank8:payments:worker`
 /// - Worker alias: `bank8:payments:w` → `:worker`
 /// - Legacy hyphen: `sentin8-auth`, `bank8-payments-worker` (accepted for
-/// operator muscle memory)
+///   operator muscle memory)
 ///
 /// Canonicalization delegates to `sentin8::config::canonical_service_type`.
 fn normalize_service_type(token: &str) -> String {
     sentin8::config::canonical_service_type(token)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalize_canonical() {
-        assert_eq!(normalize_service_type("sentin8:auth"), "sentin8:auth");
-        assert_eq!(normalize_service_type("sentin8:acme"), "sentin8:acme");
-        assert_eq!(normalize_service_type("sentin8:proxy"), "sentin8:proxy");
-        assert_eq!(normalize_service_type("sentin8:bus"), "sentin8:bus");
-        assert_eq!(normalize_service_type("test:ledger"), "test:ledger");
-        assert_eq!(normalize_service_type("test:payments"), "test:payments");
-        assert_eq!(normalize_service_type("test:pms"), "test:pms");
-    }
-
-    #[test]
-    fn normalize_worker_alias() {
-        assert_eq!(
-            normalize_service_type("bank8:payments:w"),
-            "bank8:payments:worker"
-        );
-        assert_eq!(
-            normalize_service_type("bank8:payments:worker"),
-            "bank8:payments:worker"
-        );
-    }
-
-    #[test]
-    fn normalize_legacy_hyphen_forms() {
-        assert_eq!(normalize_service_type("sentin8-auth"), "sentin8:auth");
-        assert_eq!(
-            normalize_service_type("test-payments-worker"),
-            "test:payments:worker"
-        );
-        assert_eq!(normalize_service_type("sentin8-acme"), "sentin8:acme");
-        assert_eq!(
-            normalize_service_type("bank8-payments-worker"),
-            "bank8:payments:worker"
-        );
-    }
 }
 
 /// The default Sentin8 service catalog.
@@ -543,3 +499,44 @@ pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
     m
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_canonical() {
+        assert_eq!(normalize_service_type("sentin8:auth"), "sentin8:auth");
+        assert_eq!(normalize_service_type("sentin8:acme"), "sentin8:acme");
+        assert_eq!(normalize_service_type("sentin8:proxy"), "sentin8:proxy");
+        assert_eq!(normalize_service_type("sentin8:bus"), "sentin8:bus");
+        assert_eq!(normalize_service_type("test:ledger"), "test:ledger");
+        assert_eq!(normalize_service_type("test:payments"), "test:payments");
+        assert_eq!(normalize_service_type("test:pms"), "test:pms");
+    }
+
+    #[test]
+    fn normalize_worker_alias() {
+        assert_eq!(
+            normalize_service_type("bank8:payments:w"),
+            "bank8:payments:worker"
+        );
+        assert_eq!(
+            normalize_service_type("bank8:payments:worker"),
+            "bank8:payments:worker"
+        );
+    }
+
+    #[test]
+    fn normalize_legacy_hyphen_forms() {
+        assert_eq!(normalize_service_type("sentin8-auth"), "sentin8:auth");
+        assert_eq!(
+            normalize_service_type("test-payments-worker"),
+            "test:payments:worker"
+        );
+        assert_eq!(normalize_service_type("sentin8-acme"), "sentin8:acme");
+        assert_eq!(
+            normalize_service_type("bank8-payments-worker"),
+            "bank8:payments:worker"
+        );
+    }
+}

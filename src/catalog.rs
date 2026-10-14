@@ -244,39 +244,6 @@ fn port_env_parts(service_type: &str) -> (String, bool) {
     (slug, is_worker)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::port_env_parts;
-
-    #[test]
-    fn port_env_parts_colon_identity() {
-        assert_eq!(
-            port_env_parts("sentin8:auth"),
-            ("SENTIN8_AUTH".to_string(), false)
-        );
-        assert_eq!(
-            port_env_parts("bank8:ledger"),
-            ("BANK8_LEDGER".to_string(), false)
-        );
-        assert_eq!(
-            port_env_parts("bank8:payments:worker"),
-            ("BANK8_PAYMENTS".to_string(), true)
-        );
-    }
-
-    #[test]
-    fn port_env_parts_legacy_hyphen() {
-        assert_eq!(
-            port_env_parts("sentin8-auth"),
-            ("SENTIN8_AUTH".to_string(), false)
-        );
-        assert_eq!(
-            port_env_parts("bank8-payments-worker"),
-            ("BANK8_PAYMENTS".to_string(), true)
-        );
-    }
-}
-
 impl ServiceCatalogEntry {
     /// Build the full `tokio::process::Command` argv for an instance on the
     /// given port. In dev we launch via `cargo run --bin <binary>` so the
@@ -471,8 +438,8 @@ impl ServiceCatalogEntry {
                     // Fallback: first prefix dir (will fail with a clear error).
                     std::path::Path::new(dirs.split(':').next().unwrap_or("")).join(&self.binary)
                 });
-            let c = tokio::process::Command::new(binary_path);
-            c
+            
+            tokio::process::Command::new(binary_path)
         } else {
             // Dev: `cargo run --quiet --bin <binary>`.
             let mut c = tokio::process::Command::new("cargo");
@@ -648,5 +615,38 @@ impl ServiceCatalogEntry {
         cmd.process_group(0);
 
         cmd
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::port_env_parts;
+
+    #[test]
+    fn port_env_parts_colon_identity() {
+        assert_eq!(
+            port_env_parts("sentin8:auth"),
+            ("SENTIN8_AUTH".to_string(), false)
+        );
+        assert_eq!(
+            port_env_parts("bank8:ledger"),
+            ("BANK8_LEDGER".to_string(), false)
+        );
+        assert_eq!(
+            port_env_parts("bank8:payments:worker"),
+            ("BANK8_PAYMENTS".to_string(), true)
+        );
+    }
+
+    #[test]
+    fn port_env_parts_legacy_hyphen() {
+        assert_eq!(
+            port_env_parts("sentin8-auth"),
+            ("SENTIN8_AUTH".to_string(), false)
+        );
+        assert_eq!(
+            port_env_parts("bank8-payments-worker"),
+            ("BANK8_PAYMENTS".to_string(), true)
+        );
     }
 }

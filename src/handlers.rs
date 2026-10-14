@@ -290,130 +290,130 @@ pub async fn startup_stream(
     require_captain_policy(&state, &headers).await?;
 
     let stream = async_stream::stream! {
-           let conn = state.conn.clone();
-           let total = state.live_catalog.read().unwrap().len();
-           let mut last_ready_count = 0usize;
-           let mut last_progress = std::time::Instant::now();
+               let conn = state.conn.clone();
+               let total = state.live_catalog.read().unwrap().len();
+               let mut last_ready_count = 0usize;
+               let mut last_progress = std::time::Instant::now();
 
-           loop {
-               let instances = store::list_all(&conn).await.unwrap_or_default();
+               loop {
+                   let instances = store::list_all(&conn).await.unwrap_or_default();
 
-    // Count Active instances per service type.
-               use std::collections::HashMap;
-               let active_counts: HashMap<String, usize> = instances
-                   .iter()
-                   .filter(|i| i.status == "Active")
-                   .fold(HashMap::new(), |mut acc, i| {
-                       *acc.entry(i.service_type.clone()).or_insert(0) += 1;
-                       acc
-                   });
+        // Count Active instances per service type.
+                   use std::collections::HashMap;
+                   let active_counts: HashMap<String, usize> = instances
+                       .iter()
+                       .filter(|i| i.status == "Active")
+                       .fold(HashMap::new(), |mut acc, i| {
+                           *acc.entry(i.service_type.clone()).or_insert(0) += 1;
+                           acc
+                       });
 
-    // Check which services are pending.
-               let mut pending: Vec<serde_json::Value> = Vec::new();
-               let catalog_entries: Vec<ServiceCatalogEntry> = {
-                   let catalog = state.live_catalog.read().unwrap();
-                   catalog.values().cloned().collect()
-               };
-               for entry in &catalog_entries {
-                   let active = *active_counts.get(&entry.service_type).unwrap_or(&0);
-                   if active < crate::catalog::MIN_INSTANCES as usize {
-                       let status = instances
-                           .iter()
-                           .find(|i| i.service_type == entry.service_type)
-                           .map(|i| i.status.as_str())
-                           .unwrap_or("missing");
-                       pending.push(serde_json::json!({
-                           "service": entry.service_type,
-                           "active": active,
-                           "required": crate::catalog::MIN_INSTANCES,
-                           "status": status,
-                       }));
+        // Check which services are pending.
+                   let mut pending: Vec<serde_json::Value> = Vec::new();
+                   let catalog_entries: Vec<ServiceCatalogEntry> = {
+                       let catalog = state.live_catalog.read().unwrap();
+                       catalog.values().cloned().collect()
+                   };
+                   for entry in &catalog_entries {
+                       let active = *active_counts.get(&entry.service_type).unwrap_or(&0);
+                       if active < crate::catalog::MIN_INSTANCES as usize {
+                           let status = instances
+                               .iter()
+                               .find(|i| i.service_type == entry.service_type)
+                               .map(|i| i.status.as_str())
+                               .unwrap_or("missing");
+                           pending.push(serde_json::json!({
+                               "service": entry.service_type,
+                               "active": active,
+                               "required": crate::catalog::MIN_INSTANCES,
+                               "status": status,
+                           }));
+                       }
                    }
-               }
 
-               let ready_count = total - pending.len();
-               let ready = pending.is_empty();
+                   let ready_count = total - pending.len();
+                   let ready = pending.is_empty();
 
-// WARN-10: crash-looped services surface as FIRST-CLASS alerts — the
-// CLI prints them and the operator sees WHICH service gave up and where
-// to look, instead of a silent 'waiting on' loop that ends in timeout.
-               let alerts = store::list_alerts(&conn).await.unwrap_or_default();
-               let alert_values: Vec<serde_json::Value> = alerts
-                   .iter()
-                   .map(|(svc, a)| {
-                       serde_json::json!({
-                           "service": svc,
-                           "restarts": a.restarts,
-                           "reason": a.reason,
-                           "log_path": a.log_path,
+    // WARN-10: crash-looped services surface as FIRST-CLASS alerts — the
+    // CLI prints them and the operator sees WHICH service gave up and where
+    // to look, instead of a silent 'waiting on' loop that ends in timeout.
+                   let alerts = store::list_alerts(&conn).await.unwrap_or_default();
+                   let alert_values: Vec<serde_json::Value> = alerts
+                       .iter()
+                       .map(|(svc, a)| {
+                           serde_json::json!({
+                               "service": svc,
+                               "restarts": a.restarts,
+                               "reason": a.reason,
+                               "log_path": a.log_path,
+                           })
                        })
-                   })
-                   .collect();
-               let mut reported_alerts: std::collections::HashSet<String> =
-                   std::collections::HashSet::new();
+                       .collect();
+                   let mut reported_alerts: std::collections::HashSet<String> =
+                       std::collections::HashSet::new();
 
-// Only emit when the count changes (avoid spamming identical events).
-               if ready_count != last_ready_count || ready {
-                   last_ready_count = ready_count;
-                   last_progress = std::time::Instant::now();
+    // Only emit when the count changes (avoid spamming identical events).
+                   if ready_count != last_ready_count || ready {
+                       last_ready_count = ready_count;
+                       last_progress = std::time::Instant::now();
 
-                   let payload = serde_json::json!({
-                       "ready_count": ready_count,
-                       "total": total,
-                       "pending": pending,
-                       "alerts": alert_values,
-                   });
+                       let payload = serde_json::json!({
+                           "ready_count": ready_count,
+                           "total": total,
+                           "pending": pending,
+                           "alerts": alert_values,
+                       });
 
-// One alert event per NOT-YET-REPORTED failure (the CLI prints once per
-// give-up; later progress frames re-carry the array for late joiners).
-                   for (svc, a) in alerts.iter() {
-                       if reported_alerts.insert(svc.clone()) {
+    // One alert event per NOT-YET-REPORTED failure (the CLI prints once per
+    // give-up; later progress frames re-carry the array for late joiners).
+                       for (svc, a) in alerts.iter() {
+                           if reported_alerts.insert(svc.clone()) {
+                               yield Ok::<_, std::convert::Infallible>(
+                                   axum::response::sse::Event::default()
+                                       .event("alert")
+                                       .json_data(serde_json::json!({
+                                           "service": svc,
+                                           "restarts": a.restarts,
+                                           "reason": a.reason,
+                                           "log_path": a.log_path,
+                                       }))
+                                       .unwrap(),
+                               );
+                           }
+                       }
+
+                       if ready {
                            yield Ok::<_, std::convert::Infallible>(
                                axum::response::sse::Event::default()
-                                   .event("alert")
-                                   .json_data(serde_json::json!({
-                                       "service": svc,
-                                       "restarts": a.restarts,
-                                       "reason": a.reason,
-                                       "log_path": a.log_path,
-                                   }))
+                                   .event("ready")
+                                   .json_data(&payload)
+                                   .unwrap(),
+                           );
+                           yield Ok(axum::response::sse::Event::default().event("done").data("[done]"));
+                           break;
+                       } else {
+                           yield Ok::<_, std::convert::Infallible>(
+                               axum::response::sse::Event::default()
+                                   .event("progress")
+                                   .json_data(&payload)
                                    .unwrap(),
                            );
                        }
                    }
 
-                   if ready {
+        // Timeout: 5 minutes with no progress.
+                   if last_progress.elapsed().as_secs() > 300 {
                        yield Ok::<_, std::convert::Infallible>(
                            axum::response::sse::Event::default()
-                               .event("ready")
-                               .json_data(&payload)
-                               .unwrap(),
+                               .event("timeout")
+                               .data("startup stalled — no progress for 5 minutes"),
                        );
-                       yield Ok(axum::response::sse::Event::default().event("done").data("[done]"));
                        break;
-                   } else {
-                       yield Ok::<_, std::convert::Infallible>(
-                           axum::response::sse::Event::default()
-                               .event("progress")
-                               .json_data(&payload)
-                               .unwrap(),
-                       );
                    }
-               }
 
-    // Timeout: 5 minutes with no progress.
-               if last_progress.elapsed().as_secs() > 300 {
-                   yield Ok::<_, std::convert::Infallible>(
-                       axum::response::sse::Event::default()
-                           .event("timeout")
-                           .data("startup stalled — no progress for 5 minutes"),
-                   );
-                   break;
+                   tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                }
-
-               tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-           }
-       };
+           };
 
     Ok(axum::response::sse::Sse::new(stream))
 }
@@ -530,14 +530,14 @@ pub async fn list_services(
     let filtered: Vec<_> = instances
         .into_iter()
         .filter(|i| {
-            q.service_type.as_deref().map_or(true, |s| {
+            q.service_type.as_deref().is_none_or(|s| {
                 // Accept both colon and legacy hyphen query forms
                 // canonicalize before comparing.
                 i.service_type == sentin8::config::canonical_service_type(s)
             })
         })
-        .filter(|i| q.local_ip.as_deref().map_or(true, |s| i.local_ip == s))
-        .filter(|i| q.status.as_deref().map_or(true, |s| i.status == s))
+        .filter(|i| q.local_ip.as_deref().is_none_or(|s| i.local_ip == s))
+        .filter(|i| q.status.as_deref().is_none_or(|s| i.status == s))
         .collect();
     Ok(Json(filtered))
 }
@@ -696,7 +696,7 @@ pub async fn service_action(
             let pid = inst.pid;
             if pid != 0 {
                 let _ = crate::supervisor::stop(
-                    &mut state.conn.clone(),
+                    &state.conn.clone(),
                     &inst,
                     &entry,
                     pid,
@@ -713,7 +713,7 @@ pub async fn service_action(
             // invariant 10) — a manual start after kills must not reset the
             // consecutive-restart bookkeeping.
             let _ = crate::supervisor::spawn(
-                &mut state.conn.clone(),
+                &state.conn.clone(),
                 &inst,
                 &entry,
                 inst.local_port,
@@ -746,7 +746,7 @@ pub async fn service_action(
                     }))
                     .unwrap_or_default(),
                 )
-                .query_async(&mut state.conn.clone())
+                .query_async(&state.conn.clone())
                 .await
                 .unwrap_or(());
 
@@ -1093,7 +1093,7 @@ async fn run_upgrade(
         instances.into_iter().find(|i| {
             i.service_type == service_type
                 && i.local_port == port
-                && expected_pid.map_or(true, |p| i.pid == p)
+                && expected_pid.is_none_or(|p| i.pid == p)
         })
     }
 
@@ -1145,14 +1145,8 @@ async fn run_upgrade(
     let mut new_active = false;
     while std::time::Instant::now() < deadline {
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-        if let Some(new_inst) = get_new_inst(
-            &conn,
-            &local_ip,
-            &service_type,
-            next_port,
-            Some(new_pid),
-        )
-        .await
+        if let Some(new_inst) =
+            get_new_inst(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await
         {
             if new_inst.status == "Active" {
                 new_active = true;
@@ -1165,14 +1159,7 @@ async fn run_upgrade(
     if !new_active {
         tracing::warn!(service = %service_type, new_port = next_port, "upgrade: did not become Active — aborting, keeping old instance");
         crate::scaler::release_reserved_port(&conn, &local_ip, next_port).await;
-        stop_new(
-            &conn,
-            &local_ip,
-            &service_type,
-            next_port,
-            Some(new_pid),
-        )
-        .await;
+        stop_new(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await;
         write_progress(
             &conn,
             &upgrade_key,
@@ -1213,25 +1200,12 @@ async fn run_upgrade(
     let mut stable = false;
     while std::time::Instant::now() < stability_deadline {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        if let Some(new_inst) = get_new_inst(
-            &conn,
-            &local_ip,
-            &service_type,
-            next_port,
-            Some(new_pid),
-        )
-        .await
+        if let Some(new_inst) =
+            get_new_inst(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await
         {
             if new_inst.status != "Active" {
                 tracing::warn!(service = %service_type, new_port = next_port, "upgrade: lost Active during stability check — aborting");
-                stop_new(
-                    &conn,
-                    &local_ip,
-                    &service_type,
-                    next_port,
-                    Some(new_pid),
-                )
-                .await;
+                stop_new(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await;
                 write_progress(
                     &conn,
                     &upgrade_key,
@@ -1255,14 +1229,7 @@ async fn run_upgrade(
 
     if !stable {
         tracing::warn!(service = %service_type, new_port = next_port, "upgrade: not stable after 60s — aborting");
-        stop_new(
-            &conn,
-            &local_ip,
-            &service_type,
-            next_port,
-            Some(new_pid),
-        )
-        .await;
+        stop_new(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await;
         write_progress(
             &conn,
             &upgrade_key,
@@ -1308,26 +1275,13 @@ async fn run_upgrade(
     let mut stable_under_load = false;
     while std::time::Instant::now() < load_deadline {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        if let Some(new_inst) = get_new_inst(
-            &conn,
-            &local_ip,
-            &service_type,
-            next_port,
-            Some(new_pid),
-        )
-        .await
+        if let Some(new_inst) =
+            get_new_inst(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await
         {
             if new_inst.status != "Active" {
                 tracing::warn!(service = %service_type, new_port = next_port, "upgrade: lost Active under load — rolling back");
                 let _ = store::mark_active(&conn, inst).await;
-                stop_new(
-                    &conn,
-                    &local_ip,
-                    &service_type,
-                    next_port,
-                    Some(new_pid),
-                )
-                .await;
+                stop_new(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await;
                 tracing::info!(service = %service_type, old_port, "upgrade: old instance reactivated (rollback)");
                 write_progress(
                     &conn,
@@ -1353,14 +1307,7 @@ async fn run_upgrade(
     if !stable_under_load {
         tracing::warn!(service = %service_type, new_port = next_port, "upgrade: not stable under load — rolling back");
         let _ = store::mark_active(&conn, inst).await;
-        stop_new(
-            &conn,
-            &local_ip,
-            &service_type,
-            next_port,
-            Some(new_pid),
-        )
-        .await;
+        stop_new(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await;
         tracing::info!(service = %service_type, old_port, "upgrade: old instance reactivated (rollback)");
         write_progress(
             &conn,
@@ -1453,7 +1400,9 @@ async fn resolve_instance(
     let all = store::list_all(conn).await?;
     let matches: Vec<store::ServiceInstance> = all.into_iter().filter(|i| i.key == key).collect();
     match matches.len() {
-        1 => Ok(KeyResolution::Unique(Box::new(matches.into_iter().next().unwrap()))),
+        1 => Ok(KeyResolution::Unique(Box::new(
+            matches.into_iter().next().unwrap(),
+        ))),
         0 => Ok(KeyResolution::NotFound(format!(
             "instance not found: {key}"
         ))),
@@ -1497,27 +1446,23 @@ pub async fn list_alerts(
     require_captain_policy(&state, &headers).await?;
 
     let conn = state.conn.clone();
-    let alerts = store::list_alerts(&conn)
-        .await
-        .map_err(|e| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("valkey list-alerts: {e}"),
-            )
-        })?;
+    let alerts = store::list_alerts(&conn).await.map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            format!("valkey list-alerts: {e}"),
+        )
+    })?;
     let values: Vec<serde_json::Value> = alerts
         .into_iter()
-        .map(
-            |(svc, a)| {
-                serde_json::json!({
-                    "service": svc,
-                    "restarts": a.restarts,
-                    "reason": a.reason,
-                    "log_path": a.log_path,
-                    "at": a.at,
-                })
-            },
-        )
+        .map(|(svc, a)| {
+            serde_json::json!({
+                "service": svc,
+                "restarts": a.restarts,
+                "reason": a.reason,
+                "log_path": a.log_path,
+                "at": a.at,
+            })
+        })
         .collect();
     Ok(Json(values))
 }
@@ -1691,16 +1636,16 @@ pub(crate) async fn spawn_one_service(
             service_type: i.service_type,
         })
         .collect::<Vec<_>>();
-    let (local_obs, fleet_obs): (Vec<crate::placement::ObservedInstance>, Vec<crate::placement::ObservedInstance>) =
-        all.iter()
-            .cloned()
-            .partition::<Vec<_>, _>(|i| i.ip == local_ip);
-    if let Err(refusal) = crate::placement::placement_admits(
-        entry,
-        local_ip,
-        &local_obs,
-        &fleet_obs,
-    ) {
+    let (local_obs, fleet_obs): (
+        Vec<crate::placement::ObservedInstance>,
+        Vec<crate::placement::ObservedInstance>,
+    ) = all
+        .iter()
+        .cloned()
+        .partition::<Vec<_>, _>(|i| i.ip == local_ip);
+    if let Err(refusal) =
+        crate::placement::placement_admits(entry, local_ip, &local_obs, &fleet_obs)
+    {
         let message = format!(
             "placement gate refused service '{}': {} ({})",
             service_type,
@@ -1734,7 +1679,9 @@ pub(crate) async fn spawn_one_service(
     };
 
     let mut cmd = entry.spawn_command(port);
-    let child = cmd.spawn().map_err(|e| format!("spawn {service_type}: {e}"))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("spawn {service_type}: {e}"))?;
     let pid = child.id().ok_or_else(|| "no pid".to_string())?;
     crate::supervisor::register_child(pid, child);
 
@@ -1819,9 +1766,9 @@ pub async fn start_services(
                 }
             }
         };
-        let mut conn_spawn = state.conn.clone();
+        let conn_spawn = state.conn.clone();
         match spawn_one_service(
-            &mut conn_spawn,
+            &conn_spawn,
             &state.config.local_ip,
             port_range,
             service_type,
@@ -1833,9 +1780,7 @@ pub async fn start_services(
                 started.push(service_type.clone());
                 tracing::info!(service = service_type, %port, "start-services: spawned");
             }
-            Err(reason)
-                if reason.starts_with("placement gate refused") =>
-            {
+            Err(reason) if reason.starts_with("placement gate refused") => {
                 return Err((axum::http::StatusCode::CONFLICT, reason));
             }
             Err(reason) => {
@@ -2051,10 +1996,9 @@ pub async fn autoscaler_approve(
         ));
     }
     let conn = state.conn.clone();
-    let result =
-        crate::provision::approve(&conn, &state.config, &req.kind, &req.ip, &req.decision)
-            .await
-            .map_err(|e| (axum::http::StatusCode::CONFLICT, e.to_string()))?;
+    let result = crate::provision::approve(&conn, &state.config, &req.kind, &req.ip, &req.decision)
+        .await
+        .map_err(|e| (axum::http::StatusCode::CONFLICT, e.to_string()))?;
     Ok(Json(result))
 }
 

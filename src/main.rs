@@ -127,7 +127,7 @@ async fn main() -> anyhow::Result<()> {
         std::env::var("VALKEY_URL")
             .ok()
             .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| sentin8::config::service_valkey_url()),
+            .unwrap_or_else(sentin8::config::service_valkey_url),
         "sentin8:captain",
     );
 

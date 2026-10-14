@@ -39,7 +39,7 @@ use crate::provision;
 ///
 /// Pages:
 /// - `overview` — autoscaler state cards (profile, backend, fleet,
-/// leader) + the pending-approval table (manual profile)
+///   leader) + the pending-approval table (manual profile)
 /// - `machines` — per-machine host CPU/mem + saturation flags
 pub async fn get_admin_ui(
     State(state): State<AppState>,
@@ -151,9 +151,7 @@ pub async fn get_admin_data(
                 .collect()
         }
         "autoscaler-machines" => {
-            let machines = provision::list_machines(&conn)
-                .await
-                .unwrap_or_default();
+            let machines = provision::list_machines(&conn).await.unwrap_or_default();
             machines
                 .iter()
                 .map(|m| {
@@ -175,9 +173,7 @@ pub async fn get_admin_data(
                 .query_async(&conn)
                 .await
                 .unwrap_or(None);
-            let fleet = provision::count_fleet_machines(&conn)
-                .await
-                .unwrap_or(0);
+            let fleet = provision::count_fleet_machines(&conn).await.unwrap_or(0);
             vec![serde_json::json!({
                 "id": "autoscaler",
                 "profile": config.provision_profile.as_str(),
@@ -343,9 +339,7 @@ async fn leader_description(state: &AppState) -> String {
         .query_async(&conn)
         .await
         .unwrap_or(None);
-    let fleet = provision::count_fleet_machines(&conn)
-        .await
-        .unwrap_or(0);
+    let fleet = provision::count_fleet_machines(&conn).await.unwrap_or(0);
     let is_me = leader.as_deref() == Some(std::process::id().to_string().as_str());
     match leader {
         Some(l) if is_me => {

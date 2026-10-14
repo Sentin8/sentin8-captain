@@ -255,9 +255,7 @@ async fn cleanup_terminal_states_removes_stopped_and_killed() {
         store::upsert_instance(&conn, i).await.unwrap();
     }
 
-    let removed = store::cleanup_terminal_states(&conn, &ip)
-        .await
-        .unwrap();
+    let removed = store::cleanup_terminal_states(&conn, &ip).await.unwrap();
     assert_eq!(
         removed, 2,
         "exactly the Stopped + Killed entries are removed"
@@ -296,9 +294,7 @@ async fn metrics_and_counters_roundtrip() {
     store::update_version_build(&conn, &base, Some("9.9.9"), Some("260905-1200"))
         .await
         .unwrap();
-    store::set_api_calls(&conn, &ip, &svc, 777)
-        .await
-        .unwrap();
+    store::set_api_calls(&conn, &ip, &svc, 777).await.unwrap();
     store::set_error_warning_counts(&conn, &ip, &svc, 3, 5)
         .await
         .unwrap();
@@ -366,9 +362,7 @@ async fn count_for_type_on_ip_counts_this_ip_only() {
     let mine = on_ip(inst(&svc, 9510, "Active", 0), &ip);
     store::upsert_instance(&conn, &mine).await.unwrap();
 
-    let n = store::count_for_type_on_ip(&conn, &svc, &ip)
-        .await
-        .unwrap();
+    let n = store::count_for_type_on_ip(&conn, &svc, &ip).await.unwrap();
     assert_eq!(n, 1, "exactly one Active instance on this IP");
     // A different IP sees zero.
     let n2 = store::count_for_type_on_ip(&conn, &svc, "203.0.113.9")
@@ -392,9 +386,7 @@ async fn self_heal_gives_up_after_max_restarts() {
     store::upsert_instance(&conn, &doomed).await.unwrap();
 
     let entry = dummy_entry(&svc);
-    let action = supervisor::self_heal(&conn, &doomed, &entry)
-        .await
-        .unwrap();
+    let action = supervisor::self_heal(&conn, &doomed, &entry).await.unwrap();
     assert!(
         matches!(action, supervisor::HealAction::Alerted { restarts: 3 }),
         "at MAX_RESTARTS the supervisor alerts instead of respawning"
@@ -443,9 +435,7 @@ async fn scaler_cooldown_decision_runs_over_active_only() {
     let starting = on_ip(inst(&svc, 9513, "Starting", 0), &ip);
     store::upsert_instance(&conn, &starting).await.unwrap();
 
-    let n = store::count_for_type_on_ip(&conn, &svc, &ip)
-        .await
-        .unwrap();
+    let n = store::count_for_type_on_ip(&conn, &svc, &ip).await.unwrap();
     assert_eq!(n, 0, "only Active instances count toward scaler decisions");
     delete_by_key(&conn, &svc, &starting.key).await;
 }
@@ -486,7 +476,9 @@ async fn upgrade_in_progress_key_is_valkey_backed() {
 
     {
         use glide::AsyncCommands as _;
-        let _: Result<(), _> = conn.set::<_, _, ()>(&upgrade_key, r#"{"phase":"starting"}"#).await;
+        let _: Result<(), _> = conn
+            .set::<_, _, ()>(&upgrade_key, r#"{"phase":"starting"}"#)
+            .await;
     }
     assert!(monitor::is_upgrade_in_progress(&conn, key).await);
     {
@@ -523,7 +515,9 @@ async fn upgrade_guard_matches_both_old_and_new_keys() {
     // for it to go Active (the flapping-instance incident class).
     {
         use glide::AsyncCommands as _;
-        let _: Result<i64, _> = conn.set::<_, _, i64>(&new_key, r#"{"phase":"spawned"}"#).await;
+        let _: Result<i64, _> = conn
+            .set::<_, _, i64>(&new_key, r#"{"phase":"spawned"}"#)
+            .await;
     }
     assert!(
         monitor::is_upgrade_in_progress(&conn, key).await,
@@ -537,7 +531,9 @@ async fn upgrade_guard_matches_both_old_and_new_keys() {
     // The OLD-instance key alone still guards as before.
     {
         use glide::AsyncCommands as _;
-        let _: Result<i64, _> = conn.set::<_, _, i64>(&old_key, r#"{"phase":"draining"}"#).await;
+        let _: Result<i64, _> = conn
+            .set::<_, _, i64>(&old_key, r#"{"phase":"draining"}"#)
+            .await;
     }
     assert!(monitor::is_upgrade_in_progress(&conn, key).await);
 

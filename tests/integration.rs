@@ -339,9 +339,7 @@ fn platform_catalog_carries_fleet_placement_values() {
     let proxy = config.get("sentin8:proxy").expect("proxy in catalog");
     assert_eq!(proxy.placement, "pin:edge");
     assert!(proxy.singleton, "proxy must be a fleet singleton");
-    let captain = config
-        .get("sentin8:captain")
-        .expect("captain in catalog");
+    let captain = config.get("sentin8:captain").expect("captain in catalog");
     assert!(captain.singleton);
     // Unconstrained services admit anywhere.
     let auth = config.get("sentin8:auth").expect("auth in catalog");
@@ -388,7 +386,11 @@ fn select_target_machine_prefers_least_loaded_and_excludes_self() {
         cpu_pct: cpu,
         mem_pct: mem,
     };
-    let machines = vec![c("10.0.0.1", 40.0, 60.0), c("10.0.0.2", 10.0, 20.0), c("10.0.0.3", 70.0, 30.0)];
+    let machines = vec![
+        c("10.0.0.1", 40.0, 60.0),
+        c("10.0.0.2", 10.0, 20.0),
+        c("10.0.0.3", 70.0, 30.0),
+    ];
     // Least-loaded wins; the leader is excluded.
     let picked = select_target_machine(&machines, "10.0.0.1").expect("a candidate");
     assert_eq!(picked.ip, "10.0.0.2");
@@ -398,7 +400,6 @@ fn select_target_machine_prefers_least_loaded_and_excludes_self() {
     // Empty → None.
     assert!(select_target_machine(&[], "10.0.0.1").is_none());
 }
-
 
 #[test]
 fn scaler_thresholds_are_never_scale() {
@@ -741,10 +742,8 @@ fn provision_scale_in_no_candidates() {
 fn provision_fleet_size_counts_distinct_machines() {
     // The fleet size is simply the count of fresh host samples — the
     // 2-minute TTL means dead machines drop out automatically.
-    let samples = vec![
-        machine("10.0.0.1", 1.0, 1.0, false),
-        machine("10.0.0.2", 2.0, 2.0, false),
-    ];
+    let samples = [machine("10.0.0.1", 1.0, 1.0, false),
+        machine("10.0.0.2", 2.0, 2.0, false)];
     assert_eq!(samples.len(), 2);
     assert_eq!(
         Vec::<sentin8_captain_server::provision::MachineSample>::new().len(),

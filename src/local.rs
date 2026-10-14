@@ -45,7 +45,7 @@ pub const LOCAL_PEER_HEADER: &str = "x-sentin8-local-peer-uid";
 /// always is; otherwise the uid must match the socket file's owner (the
 /// account that launched captain).
 pub fn uid_authorized(uid: u32, socket_owner: Option<u32>) -> bool {
-    uid == 0 || socket_owner.map_or(false, |owner| owner == uid)
+    uid == 0 || (socket_owner == Some(uid))
 }
 
 /// Bind the local control socket, returning the listener plus the socket
@@ -141,8 +141,8 @@ pub async fn serve_local(
         };
         // Kernel-proven identity of the connecting process (fail-closed:
         // unreadable credentials count as unauthorized).
-        let peer_uid = stream.peer_cred().ok().map(|c| c.uid() as u32);
-        if !peer_uid.map_or(false, |uid| uid_authorized(uid, socket_owner)) {
+        let peer_uid = stream.peer_cred().ok().map(|c| c.uid());
+        if !peer_uid.is_some_and(|uid| uid_authorized(uid, socket_owner)) {
             let _ = reject_unauthorized(stream).await;
             continue;
         }

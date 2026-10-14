@@ -391,8 +391,8 @@ pub fn resolve_provisioner(name: &str) -> Box<dyn Provisioner> {
 /// runtime-derivation discipline):
 ///
 /// - `SENTIN8_CAPTAIN_TOFU_DIR` — working dir holding the OpenTofu
-/// configuration (default `<state_dir/captain>/tofu`). The operator
-/// supplies the `.tf` files (module per backend, variables below).
+///   configuration (default `<state_dir/captain>/tofu`). The operator
+///   supplies the `.tf` files (module per backend, variables below).
 /// - `SENTIN8_CAPTAIN_TOFU_BIN` — binary name (default `tofu`).
 ///
 /// Per-apply variables (passed as `-var`, never written to disk):
@@ -637,11 +637,18 @@ impl Provisioner for TofuProvisioner {
 /// membership; a wrong-machine call shuts down a machine the caller
 /// already owns the lifecycle decision for.
 async fn graceful_leave(ip: &str) -> Result<(), anyhow::Error> {
-    let url = format!("http://{ip}:{}/v1/captain/shutdown", sentin8::config::captain_port());
+    let url = format!(
+        "http://{ip}:{}/v1/captain/shutdown",
+        sentin8::config::captain_port()
+    );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()?;
-    let resp = client.post(&url).json(&serde_json::json!({})).send().await?;
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({}))
+        .send()
+        .await?;
     if !resp.status().is_success() {
         anyhow::bail!("shutdown endpoint returned {}", resp.status());
     }
@@ -702,12 +709,8 @@ pub async fn remote_spawn(
     // registry map authorizes `sentin8:captain:instances:write`.
     let issuer = sentin8::config::Sentin8Config::from_env().sentin8_auth_issuer();
     let ca_path = sentin8::auth::m2m::platform_ca_path();
-    let cert = sentin8::auth::m2m::ensure_workload_certificate(
-        &issuer,
-        "captain-remote",
-        &ca_path,
-    )
-    .await?;
+    let cert = sentin8::auth::m2m::ensure_workload_certificate(&issuer, "captain-remote", &ca_path)
+        .await?;
     let mtls = sentin8::middleware::mtls::MtlsConfig::new(
         &cert.ca_cert_path,
         &cert.cert_path,
@@ -761,9 +764,7 @@ async fn skip_to_scale_in(
 /// Try to acquire the fleet-wide autoscaler lock (30s TTL, heartbeated every
 /// tick while held). Returns true when this captain is the autoscaler leader.
 /// Handle try acquire leader lock.
-pub async fn try_acquire_leader_lock(
-    conn: &glide::GlideClient,
-) -> Result<bool, glide::GlideError> {
+pub async fn try_acquire_leader_lock(conn: &glide::GlideClient) -> Result<bool, glide::GlideError> {
     let result: Option<String> = glide::cmd("SET")
         .arg(AUTOSCALER_LOCK_KEY)
         .arg(std::process::id().to_string())
@@ -787,9 +788,7 @@ pub async fn release_leader_lock(conn: &glide::GlideClient) -> Result<(), glide:
 /// Read all fresh `captain:host:{ip}` samples (the 2-minute TTL means a
 /// machine whose captain died stops appearing — its samples expire).
 /// List machines.
-pub async fn list_machines(
-    conn: &glide::GlideClient,
-) -> Result<Vec<MachineSample>, anyhow::Error> {
+pub async fn list_machines(conn: &glide::GlideClient) -> Result<Vec<MachineSample>, anyhow::Error> {
     let keys: Vec<String> = glide::cmd("KEYS")
         .arg("captain:host:*")
         .query_async(conn)
@@ -957,8 +956,7 @@ pub async fn evaluate(
                     })
                     .collect::<Vec<_>>(),
                 &req.triggered_by_ip,
-            )
-            {
+            ) {
                 match remote_spawn(&target.ip, &req.busy_service).await {
                     Ok(started) if !started.is_empty() => {
                         tracing::info!(
@@ -1178,9 +1176,7 @@ pub async fn shutdown_cleanup(conn: &glide::GlideClient) {
 /// List pending requests awaiting operator approval (`manual` profile).
 /// Reads the `captain:provision:pending` HASH; expired entries are skipped.
 /// List pending.
-pub async fn list_pending(
-    conn: &glide::GlideClient,
-) -> Result<Vec<PendingRequest>, anyhow::Error> {
+pub async fn list_pending(conn: &glide::GlideClient) -> Result<Vec<PendingRequest>, anyhow::Error> {
     let entries: Vec<(String, String)> = conn.hgetall(PENDING_KEY).await?;
     let mut pending = Vec::new();
     for (_field, json) in entries {

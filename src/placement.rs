@@ -58,9 +58,7 @@ impl PlacementRefusal {
             Self::AntiViolation { anti } => {
                 format!("anti-affinity with '{anti}' which runs on this machine")
             }
-            Self::SingletonViolation => {
-                "fleet singleton already has a live instance".to_string()
-            }
+            Self::SingletonViolation => "fleet singleton already has a live instance".to_string(),
         }
     }
 }
@@ -148,9 +146,7 @@ fn placement_admits_inner(
         // fleet; counting machines needs distinct IPs.
         if pin == "edge"
             && resolve_edge().is_none()
-            && fleet_instances
-                .iter()
-                .all(|i| i.ip == local_ip)
+            && fleet_instances.iter().all(|i| i.ip == local_ip)
         {
             tracing::info!(
                 local_ip,
@@ -170,10 +166,7 @@ fn placement_admits_inner(
         }
     }
     if let Some((crate::catalog::PlacementKind::AntiAffinity, anti)) = entry.parse_placement() {
-        if local_instances
-            .iter()
-            .any(|i| i.service_type == anti)
-        {
+        if local_instances.iter().any(|i| i.service_type == anti) {
             return Err(PlacementRefusal::AntiViolation { anti });
         }
     }
@@ -198,7 +191,13 @@ pub(crate) fn placement_admits_with(
     fleet_instances: &[ObservedInstance],
     resolve_edge: EdgeIpResolver<'_>,
 ) -> Result<(), PlacementRefusal> {
-    placement_admits_inner(entry, local_ip, local_instances, fleet_instances, &resolve_edge)
+    placement_admits_inner(
+        entry,
+        local_ip,
+        local_instances,
+        fleet_instances,
+        &resolve_edge,
+    )
 }
 
 #[cfg(test)]
@@ -325,10 +324,13 @@ mod tests {
             Err(PlacementRefusal::SingletonViolation)
         );
         // No twin → admit.
-        assert!(
-            placement_admits(&e, ME, &[inst(ME, "test:db")], &[inst("10.0.0.2", "test:db")])
-                .is_ok()
-        );
+        assert!(placement_admits(
+            &e,
+            ME,
+            &[inst(ME, "test:db")],
+            &[inst("10.0.0.2", "test:db")]
+        )
+        .is_ok());
     }
 
     #[test]
@@ -341,8 +343,20 @@ mod tests {
 
     #[test]
     fn refusal_strings_are_stable() {
-        assert_eq!(PlacementRefusal::PinMismatch { pinned_to: "x".into() }.as_str(), "pin_mismatch");
-        assert_eq!(PlacementRefusal::AntiViolation { anti: "y".into() }.as_str(), "anti_violation");
-        assert_eq!(PlacementRefusal::SingletonViolation.as_str(), "singleton_violation");
+        assert_eq!(
+            PlacementRefusal::PinMismatch {
+                pinned_to: "x".into()
+            }
+            .as_str(),
+            "pin_mismatch"
+        );
+        assert_eq!(
+            PlacementRefusal::AntiViolation { anti: "y".into() }.as_str(),
+            "anti_violation"
+        );
+        assert_eq!(
+            PlacementRefusal::SingletonViolation.as_str(),
+            "singleton_violation"
+        );
     }
 }

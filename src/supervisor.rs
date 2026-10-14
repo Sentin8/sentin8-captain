@@ -14,8 +14,6 @@ use std::collections::HashSet;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-
-
 use crate::catalog::ServiceCatalogEntry;
 use crate::store;
 
@@ -76,85 +74,6 @@ where
     started.elapsed()
 }
 
-#[cfg(test)]
-mod drain_tests {
-    use super::*;
-
-    /// The gauge fn contract the helper relies on: returns
-    /// `(Some(count), false)` when the health payload carries
-    /// `active_connections`, `(None, false)` when it does not (non-gauge
-    /// service), and `(_, true)` when the health probe failed.
-
-    #[tokio::test]
-    async fn drain_exits_when_gauge_reaches_zero() {
-        // Gauge starts at 2, drops to 0 on the second poll — the drain
-        // must end well before the cap instead of sleeping it fully.
-        let mut reads = 0u32;
-        let elapsed = drain_until_idle(
-            || {
-                reads += 1;
-                let count = if reads >= 2 { 0 } else { 2 };
-                async move { (Some(count), false) }
-            },
-            5,
-            5,
-        )
-        .await;
-        assert_eq!(reads, 2, "drain must stop polling once the gauge hits 0");
-        assert!(elapsed < Duration::from_secs(4), "exited early, not at cap");
-    }
-
-    #[tokio::test]
-    async fn drain_caps_when_gauge_never_zero() {
-        // A wedged gauge (always > 0) must not block the upgrade past the
-        // cap — with a 1s cap the helper returns at ~1s, not 30s.
-        let elapsed = drain_until_idle(|| async { (Some(7u64), false) }, 1, 10).await;
-        assert!(
-            elapsed >= Duration::from_millis(500),
-            "polled at least once"
-        );
-        assert!(elapsed < Duration::from_secs(10), "capped, not hung");
-    }
-
-    #[tokio::test]
-    async fn drain_falls_back_to_fixed_window_when_gauge_absent() {
-        // Non-gauge services (no `active_connections` in the payload) fall
-        // back to the fixed drain window — the pre-gauge behavior — and
-        // do NOT wait the full 30s cap.
-        let elapsed = drain_until_idle(|| async { (None, false) }, 5, 1).await;
-        assert!(
-            elapsed >= Duration::from_millis(900),
-            "absent gauge → full fixed window"
-        );
-        assert!(
-            elapsed < Duration::from_secs(4),
-            "fallback window, not the cap"
-        );
-    }
-
-    #[tokio::test]
-    async fn drain_falls_back_when_probe_fails() {
-        // Health probe errors (service mid-shutdown) also degrade to the
-        // fixed window instead of exiting early on a stale zero.
-        let elapsed = drain_until_idle(|| async { (Some(0u64), true) }, 5, 1).await;
-        assert!(
-            elapsed >= Duration::from_millis(900),
-            "probe failure → full fixed window (no false drain-complete)"
-        );
-    }
-
-    #[tokio::test]
-    async fn drain_fallback_is_bounded_by_cap() {
-        // An operator-configured fallback larger than the cap is clamped —
-        // the 30s ceiling holds regardless of configuration.
-        let elapsed = drain_until_idle(|| async { (None, false) }, 1, 60).await;
-        assert!(
-            elapsed < Duration::from_secs(5),
-            "fallback must be capped, never the configured 60s"
-        );
-    }
-}
-
 /// Register a child so it gets reaped when it exits. Spawns a background
 /// task that calls `wait` so the OS can clean up the zombie, plus a
 /// bind-failure classifier: a child that dies within seconds of spawn
@@ -202,7 +121,7 @@ async fn reap_and_classify(pid: u32) {
     // classified — a long-lived process dying while the log still contains an
     // OLD bind failure must never be misread (log files are append-only).
     let now = chrono::Utc::now().timestamp();
-    if started_at.map_or(true, |t| now - t > STARTUP_FAIL_WINDOW_S as i64) {
+    if started_at.is_none_or(|t| now - t > STARTUP_FAIL_WINDOW_S as i64) {
         return;
     }
     let log_path = std::path::Path::new(&sentin8::config::log_dir()).join(format!("{service}.log"));
@@ -246,7 +165,9 @@ async fn registry_conn() -> Option<glide::GlideClient> {
         .ok()
         .or_else(|| std::env::var("VALKEY_URL").ok())
         .or_else(|| Some(sentin8::config::Sentin8Config::default_valkey_url().to_string()))?;
-    sentin8::middleware::valkey_client(&url, "sentin8:captain").await.ok()
+    sentin8::middleware::valkey_client(&url, "sentin8:captain")
+        .await
+        .ok()
 }
 
 /// Look up the registry row a pid belongs to, as
@@ -652,4 +573,83 @@ async fn probe_active_connections(
         return (None, true);
     }
     (probe.active_connections, false)
+}
+
+#[cfg(test)]
+mod drain_tests {
+    use super::*;
+
+    /// The gauge fn contract the helper relies on: returns
+    /// `(Some(count), false)` when the health payload carries
+    /// `active_connections`, `(None, false)` when it does not (non-gauge
+    /// service), and `(_, true)` when the health probe failed.
+
+    #[tokio::test]
+    async fn drain_exits_when_gauge_reaches_zero() {
+        // Gauge starts at 2, drops to 0 on the second poll — the drain
+        // must end well before the cap instead of sleeping it fully.
+        let mut reads = 0u32;
+        let elapsed = drain_until_idle(
+            || {
+                reads += 1;
+                let count = if reads >= 2 { 0 } else { 2 };
+                async move { (Some(count), false) }
+            },
+            5,
+            5,
+        )
+        .await;
+        assert_eq!(reads, 2, "drain must stop polling once the gauge hits 0");
+        assert!(elapsed < Duration::from_secs(4), "exited early, not at cap");
+    }
+
+    #[tokio::test]
+    async fn drain_caps_when_gauge_never_zero() {
+        // A wedged gauge (always > 0) must not block the upgrade past the
+        // cap — with a 1s cap the helper returns at ~1s, not 30s.
+        let elapsed = drain_until_idle(|| async { (Some(7u64), false) }, 1, 10).await;
+        assert!(
+            elapsed >= Duration::from_millis(500),
+            "polled at least once"
+        );
+        assert!(elapsed < Duration::from_secs(10), "capped, not hung");
+    }
+
+    #[tokio::test]
+    async fn drain_falls_back_to_fixed_window_when_gauge_absent() {
+        // Non-gauge services (no `active_connections` in the payload) fall
+        // back to the fixed drain window — the pre-gauge behavior — and
+        // do NOT wait the full 30s cap.
+        let elapsed = drain_until_idle(|| async { (None, false) }, 5, 1).await;
+        assert!(
+            elapsed >= Duration::from_millis(900),
+            "absent gauge → full fixed window"
+        );
+        assert!(
+            elapsed < Duration::from_secs(4),
+            "fallback window, not the cap"
+        );
+    }
+
+    #[tokio::test]
+    async fn drain_falls_back_when_probe_fails() {
+        // Health probe errors (service mid-shutdown) also degrade to the
+        // fixed window instead of exiting early on a stale zero.
+        let elapsed = drain_until_idle(|| async { (Some(0u64), true) }, 5, 1).await;
+        assert!(
+            elapsed >= Duration::from_millis(900),
+            "probe failure → full fixed window (no false drain-complete)"
+        );
+    }
+
+    #[tokio::test]
+    async fn drain_fallback_is_bounded_by_cap() {
+        // An operator-configured fallback larger than the cap is clamped —
+        // the 30s ceiling holds regardless of configuration.
+        let elapsed = drain_until_idle(|| async { (None, false) }, 1, 60).await;
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "fallback must be capped, never the configured 60s"
+        );
+    }
 }

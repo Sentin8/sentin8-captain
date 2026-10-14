@@ -48,12 +48,7 @@ pub async fn serve(
     let conn = {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(600);
         loop {
-            match sentin8::middleware::valkey_client(
-                &config.valkey_url,
-                "sentin8:captain",
-            )
-            .await
-            {
+            match sentin8::middleware::valkey_client(&config.valkey_url, "sentin8:captain").await {
                 Ok(c) => break c,
                 Err(e) => {
                     tracing::warn!(
@@ -320,9 +315,9 @@ pub async fn serve(
     // so `sentin8 captain services` shows them as they come up.
     {
         let config_bg = config.clone();
-        let mut conn_bg = conn.clone();
+        let conn_bg = conn.clone();
         tokio::spawn(async move {
-            start_and_register_all(&mut conn_bg, &config_bg).await;
+            start_and_register_all(&conn_bg, &config_bg).await;
         });
     }
 
@@ -574,7 +569,7 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
         // gate is a fast-path optimization, not a correctness crutch.
         if let Some(prev) = last_priority {
             if entry.start_priority != prev {
-                wait_for_tier_active(&conn, config, &tier_spawned).await;
+                wait_for_tier_active(conn, config, &tier_spawned).await;
                 tier_spawned.clear();
             }
         }
@@ -590,8 +585,8 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
         // skips with a warning. Failures here are skips, not boot errors:
         // the machine that owns the placement spawns it.
         {
-            let mut conn_obs = conn.clone();
-            let all = store::list_all(&mut conn_obs).await.unwrap_or_default();
+            let conn_obs = conn.clone();
+            let all = store::list_all(&conn_obs).await.unwrap_or_default();
             let local_obs: Vec<crate::placement::ObservedInstance> = all
                 .iter()
                 .filter(|i| i.local_ip == config.local_ip)
@@ -803,8 +798,7 @@ async fn wait_for_tier_active(
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(60);
-    let deadline = tokio::time::Instant::now()
-        + std::time::Duration::from_secs(timeout_secs);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
     tracing::info!(
         services = tier_spawned.len(),
         timeout_secs,
@@ -852,11 +846,7 @@ async fn wait_for_tier_active(
 /// Register a single spawned service in Valkey immediately. This makes
 /// the instance visible to `sentin8 captain services` / `make status` while
 /// subsequent services are still spawning.
-async fn register_spawned(
-    conn: &glide::GlideClient,
-    config: &CaptainConfig,
-    svc: &SpawnedService,
-) {
+async fn register_spawned(conn: &glide::GlideClient, config: &CaptainConfig, svc: &SpawnedService) {
     let inst = store::ServiceInstance {
         key: store::ServiceInstance::make_key(&svc.service_type, &config.local_ip, svc.local_port),
         service_type: svc.service_type.clone(),
