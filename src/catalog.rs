@@ -438,7 +438,7 @@ impl ServiceCatalogEntry {
                     // Fallback: first prefix dir (will fail with a clear error).
                     std::path::Path::new(dirs.split(':').next().unwrap_or("")).join(&self.binary)
                 });
-            
+
             tokio::process::Command::new(binary_path)
         } else {
             // Dev: `cargo run --quiet --bin <binary>`.

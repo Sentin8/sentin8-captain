@@ -742,8 +742,10 @@ fn provision_scale_in_no_candidates() {
 fn provision_fleet_size_counts_distinct_machines() {
     // The fleet size is simply the count of fresh host samples — the
     // 2-minute TTL means dead machines drop out automatically.
-    let samples = [machine("10.0.0.1", 1.0, 1.0, false),
-        machine("10.0.0.2", 2.0, 2.0, false)];
+    let samples = [
+        machine("10.0.0.1", 1.0, 1.0, false),
+        machine("10.0.0.2", 2.0, 2.0, false),
+    ];
     assert_eq!(samples.len(), 2);
     assert_eq!(
         Vec::<sentin8_captain_server::provision::MachineSample>::new().len(),
