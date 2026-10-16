@@ -4,7 +4,11 @@
     {
       "service_type": "sentin8:captain",
       "subdomain": "captain",
-      "binary": "sentin8-captain"
+      "binary": "sentin8-captain",
+      "telemetry_property": {
+        "slug": "captain",
+        "name": "Sentin8:Captain Platform Telemetry"
+      }
     }
   ]
 }
