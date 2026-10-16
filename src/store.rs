@@ -96,14 +96,35 @@ impl ServiceInstance {
 
 /// Insert or replace an instance in Valkey and notify consumers.
 /// Handle upsert instance.
+///
+/// This is the CHANGE path (FIREHOSE-1): publishes `captain:changed` so
+/// subscribers (service-discovery, the CLI) re-scan the registry — reserve
+/// it for membership/identity/lifecycle changes (spawn, status, port).
+/// Routine metrics writes go through [`upsert_metrics`], which stays
+/// silent: the monitor updates every instance's metrics every tick, and a
+/// notification per write is a 20 msg/s × 60-service fanout firehose —
+/// measured as ~5,000 TLS-decrypted allocations/s per idle service
+/// (heaptrack, MTALEAK-1) and the root cause of the fleet-wide idle-CPU
+/// and RSS-drift baselines.
 pub async fn upsert_instance(
+    conn: &glide::GlideClient,
+    inst: &ServiceInstance,
+) -> Result<(), glide::GlideError> {
+    upsert_metrics(conn, inst).await?;
+    let _: () = conn.publish("captain:changed", &inst.service_type).await?;
+    Ok(())
+}
+
+/// Insert or replace an instance in Valkey WITHOUT notifying subscribers
+/// (FIREHOSE-1): the metrics-sampling path. Same write shape as
+/// [`upsert_instance`], minus the `captain:changed` publish.
+pub async fn upsert_metrics(
     conn: &glide::GlideClient,
     inst: &ServiceInstance,
 ) -> Result<(), glide::GlideError> {
     let key = ServiceInstance::valkey_key(&inst.service_type);
     let json = serde_json::to_string(inst).unwrap_or_default();
     let _: () = conn.hset(&key, &inst.key, &json).await?;
-    let _: () = conn.publish("captain:changed", &inst.service_type).await?;
     Ok(())
 }
 
@@ -348,7 +369,13 @@ pub async fn update_metrics(
     inst.rss_mb_avg_1m = rss_mb_avg_1m;
     inst.latency_avg_1m_ms = latency_avg_1m_ms;
     inst.last_health_check = Some(chrono::Utc::now().timestamp());
-    upsert_instance(conn, &inst).await
+    // FIREHOSE-1: metrics samples ride the SILENT upsert — a publish here
+    // fired `captain:changed` ~20x/s (once per instance per monitor tick),
+    // and every subscriber's discovery loop answered each message with a
+    // full 61-command registry re-scan (~18,300 commands/s fleet-wide at
+    // 60 services; heaptrack-confirmed ~5,000 TLS-decrypt allocations/s
+    // per idle service — MTALEAK-1's root cause).
+    upsert_metrics(conn, &inst).await
 }
 
 /// Mark an instance `Killed` and increment `restarts`, returning the
