@@ -22,7 +22,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # ── THE SDK pin (RS §2.3) — the only cross-repo dependency ──
-sentin8 = { git = "https://github.com/Sentin8/sentin8-sdk", tag = "sdk-v0.6.3" }
+sentin8 = { git = "https://github.com/Sentin8/sentin8-sdk", tag = "sdk-v0.6.4" }
 
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
