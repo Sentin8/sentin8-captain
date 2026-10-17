@@ -142,15 +142,33 @@ impl CaptainConfig {
         // (`bank8:payments:w`), and legacy hyphen forms (`sentin8-auth`,
         // `bank8-payments-worker`) — all canonicalized to the colon form.
         // Example: SENTIN8_SERVICES=sentin8:auth,sentin8:bff,sentin8:bus
-        // When unset, boot spawns everything (full fleet is the default).
-        let boot_allow = env::var("SENTIN8_SERVICES").ok().map(|managed| {
-            managed
-                .split(',')
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .map(normalize_service_type)
-                .collect::<std::collections::HashSet<String>>()
-        });
+        //
+        // Boot scope default (STARTSCOPE-2, DESIGN §3): when UNSET, boot
+        // spawns the PLATFORM services only (`sentin8:*` from the built-in
+        // catalog) — never the external vertical entries. `all` (or an
+        // enumerated list) is the explicit opt-in for a full multi-vertical
+        // fleet boot; the unset case is overwhelmingly a platform-group
+        // `make start`, and silently spawning 100+ vertical services there
+        // is the accident (live 2026-10-17: a boot without the pin started
+        // bank8/bill8/email8/exchange8/hotel8/trade8 alongside the core).
+        let boot_allow = match env::var("SENTIN8_SERVICES") {
+            Ok(managed) if managed.trim() == "all" => None,
+            Ok(managed) => Some(
+                managed
+                    .split(',')
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .map(normalize_service_type)
+                    .collect::<std::collections::HashSet<String>>(),
+            ),
+            // Unset → platform-only boot scope (STARTSCOPE-2).
+            Err(_) => Some(
+                default_catalog()
+                    .keys()
+                    .cloned()
+                    .collect::<std::collections::HashSet<String>>(),
+            ),
+        };
 
         // Load external service catalogs. Captain's built-in catalog only
         // contains sentin8 platform services. External services (from bank8,

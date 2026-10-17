@@ -369,13 +369,33 @@ pub async fn update_metrics(
     inst.rss_mb_avg_1m = rss_mb_avg_1m;
     inst.latency_avg_1m_ms = latency_avg_1m_ms;
     inst.last_health_check = Some(chrono::Utc::now().timestamp());
+    // ORPHANLOOP-1 (DESIGN §5.10.2b): the metrics upsert is a WHOLE-ROW
+    // HSET — writing the TICK SNAPSHOT here would clobber concurrent row
+    // surgery (an adoption between the tick's list and this write
+    // re-inserted the stale pid and resurrected the split-brain). RE-READ
+    // the live row first and carry ITS identity fields (pid/status/
+    // restarts/started_at); only the metrics fields ride the snapshot. A
+    // row that vanished under the tick (stop/upgrade/give-up) is not
+    // resurrected — its owner handled cleanup.
+    let live = get_instance(conn, &inst.service_type, &inst.key).await?;
+    let target = match live {
+        Some(fresh) => {
+            let mut t = inst.clone();
+            t.pid = fresh.pid;
+            t.status = fresh.status.clone();
+            t.restarts = fresh.restarts;
+            t.started_at = fresh.started_at;
+            t
+        }
+        None => return Ok(()),
+    };
     // FIREHOSE-1: metrics samples ride the SILENT upsert — a publish here
     // fired `captain:changed` ~20x/s (once per instance per monitor tick),
     // and every subscriber's discovery loop answered each message with a
     // full 61-command registry re-scan (~18,300 commands/s fleet-wide at
     // 60 services; heaptrack-confirmed ~5,000 TLS-decrypt allocations/s
     // per idle service — MTALEAK-1's root cause).
-    upsert_metrics(conn, &inst).await
+    upsert_metrics(conn, &target).await
 }
 
 /// Mark an instance `Killed` and increment `restarts`, returning the

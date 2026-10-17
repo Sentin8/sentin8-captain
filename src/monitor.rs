@@ -435,14 +435,31 @@ async fn run_tick(
                     // Unresponsive but alive → kill, then self-heal. The last probe's
                     // error string rides the kill log — a misdiagnosed kill (stale
                     // pooled connection, timeout vs refusal) must be auditable.
-                    tracing::warn!(
-                        service = %inst.service_type,
-                        pid,
-                        failures = win.consecutive_failures,
-                        last_probe_error = %win.last_probe_error,
-                        "health probes failed; killing unresponsive process"
-                    );
-                    let _ = unsafe { kill_signal(pid, 9) };
+                    //
+                    // ORPHANLOOP-1 (DESIGN §5.10.2b, seam 1): the failure
+                    // window spans multiple ticks — the snapshot's pid can
+                    // have died (or been recycled by an unrelated process)
+                    // under it. RE-VERIFY liveness immediately before the
+                    // signal: never `kill_signal` a pid that is not alive
+                    // RIGHT NOW. A stale-pid kill was a phantom no-op that
+                    // masked the dead-row path (the row said Active, the
+                    // pid was long gone — the 25s kill-respawn loop).
+                    if !crate::procfs::pid_alive(pid) {
+                        tracing::debug!(
+                            service = %inst.service_type,
+                            pid,
+                            "kill skipped — pid died under the failure window; dead-row path takes it"
+                        );
+                    } else {
+                        tracing::warn!(
+                            service = %inst.service_type,
+                            pid,
+                            failures = win.consecutive_failures,
+                            last_probe_error = %win.last_probe_error,
+                            "health probes failed; killing unresponsive process"
+                        );
+                        let _ = unsafe { kill_signal(pid, 9) };
+                    }
                     // Next tick will see it dead and self-heal.
                     win.consecutive_failures = 0;
                 }

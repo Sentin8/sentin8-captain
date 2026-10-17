@@ -519,6 +519,55 @@ pub async fn self_heal(
         let _ = store::delete_instance(conn, &killed).await;
         return Ok(HealAction::NoAction);
     }
+    // ORPHANLOOP-1 (DESIGN §5.10.2b, seam 2 — "the port is the truth; the
+    // row is a cache"): before any same-key respawn, check whether a LIVE
+    // process already holds the target port. A stop/start can leave a
+    // healthy orphan serving with NO registry row (its boot spawn died at
+    // bind against this very process — that is WHY the row is stale); a
+    // blind respawn here minted a child that died binding, wrote no row,
+    // and the 25s kill-respawn loop repeated forever. Adopt-or-abstain:
+    let expected_binary = crate::server::expected_binary_for(&killed.service_type, Some(entry));
+    if let Some(holder_pid) = crate::server::pid_on_port(killed.local_port) {
+        if crate::server::is_expected_binary(holder_pid, &expected_binary) {
+            // The row-less live process IS this service — adopt it: the row
+            // is re-created at its live pid (status Active, alert cleared)
+            // and NO child is spawned. The next probe succeeds and the
+            // split-brain converges on this first heal cycle.
+            let mut adopted = killed.clone();
+            adopted.pid = holder_pid;
+            adopted.status = "Active".to_string();
+            adopted.last_health_check = Some(chrono::Utc::now().timestamp());
+            if let Err(e) = store::upsert_instance(conn, &adopted).await {
+                tracing::warn!(
+                    error = %e,
+                    service = %killed.service_type,
+                    "self-heal: port-holder adoption upsert failed — falling through to spawn"
+                );
+            } else {
+                let _ = store::clear_alert(conn, &killed.service_type).await;
+                tracing::warn!(
+                    service = %killed.service_type,
+                    port = killed.local_port,
+                    pid = holder_pid,
+                    "self-heal: adopted the row-less live process holding the port — no duplicate spawned (ORPHANLOOP-1)"
+                );
+                return Ok(HealAction::NoAction);
+            }
+        } else {
+            // A FOREIGN binary holds the port — the BindFailed posture:
+            // spawn would loop against the same holder. Leave the row
+            // Killed and surface the conflict for the operator.
+            tracing::error!(
+                service = %killed.service_type,
+                port = killed.local_port,
+                pid = holder_pid,
+                expected_binary = %expected_binary,
+                "self-heal: port held by a foreign process — row left Killed (operator intervention; respawning would loop)"
+            );
+            let _ = store::delete_instance(conn, &killed).await;
+            return Ok(HealAction::NoAction);
+        }
+    }
     // Same-key respawn: carry the consecutive-restart count into the new row
     // (captain DESIGN §8 invariant 10 — a per-spawn zero pinned the counter
     // below `MAX_RESTARTS` forever, so crash-loops never reached the give-up
