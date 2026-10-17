@@ -177,7 +177,28 @@ async fn run_tick(
                 && !SHUTTING_DOWN.load(Ordering::SeqCst)
                 && !is_upgrade_in_progress(conn, &inst.key).await
             {
-                let _ = supervisor::self_heal(conn, &inst, &entry).await;
+                // DUPROW-1 (DESIGN §5.10.2): the tick's snapshot can be
+                // seconds stale — RE-READ the row before acting. A row
+                // deleted under the tick (upgrade completion, give-up)
+                // must not be resurrected by `mark_killed`'s HSET-Back.
+                match store::get_instance(conn, &inst.service_type, &inst.key).await {
+                    Ok(Some(fresh)) => {
+                        let _ = supervisor::self_heal(conn, &fresh, &entry).await;
+                    }
+                    Ok(None) => {
+                        // Row vanished (stop/upgrade completed under the
+                        // tick): leave it dead — its owner handled cleanup.
+                        continue;
+                    }
+                    Err(e) => {
+                        tracing::debug!(
+                            error = ?e,
+                            key = %inst.key,
+                            "monitor: Killed-row re-read failed — skipping self-heal this tick"
+                        );
+                        continue;
+                    }
+                }
             }
             continue;
         }
@@ -201,8 +222,41 @@ async fn run_tick(
                 );
                 continue;
             }
-            let _ = supervisor::self_heal(conn, &inst, &entry).await;
-            continue;
+            // DUPROW-1 (DESIGN §5.10.2): a tick spans >10s over ~80
+            // rows (health probes); an upgrade completing mid-tick
+            // SIGTERMs the old pid and HDELs its row AFTER this list
+            // was captured. Acting on the stale snapshot resurrects
+            // the deleted row (mark_killed HSETs the field back) and
+            // respawns a duplicate on the old port. RE-READ the row and
+            // re-check liveness from fresh state; a changed or vanished
+            // row is left to its owner (next tick re-evaluates).
+            match store::get_instance(conn, &inst.service_type, &inst.key).await {
+                Ok(Some(fresh))
+                    if fresh.pid != 0 && procfs::pid_alive(fresh.pid) =>
+                {
+                    // The row changed under the tick (a respawn already
+                    // happened, or the pid was reassigned) — the fresh
+                    // process is alive; nothing to heal.
+                    continue;
+                }
+                Ok(Some(fresh)) => {
+                    let _ = supervisor::self_heal(conn, &fresh, &entry).await;
+                }
+                Ok(None) => {
+                    // Row deleted under the tick (upgrade complete /
+                    // give-up / stop): its owner handled cleanup — the
+                    // stale snapshot must NOT resurrect it.
+                    continue;
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        error = ?e,
+                        key = %inst.key,
+                        "monitor: dead-row re-read failed — skipping self-heal this tick"
+                    );
+                    continue;
+                }
+            }
         }
         // Sample CPU/memory — tick-based (diff between consecutive
         // monitor ticks, no sleep). Same 10s window as the host CPU
@@ -317,6 +371,17 @@ async fn run_tick(
             }
             if inst.status == "Active" {
                 win.started_ticks += 1;
+                // Stale-alert hygiene (DUPROW-1 follow-up, DESIGN §4
+                // alerts row): the clear must fire on ANY healthy
+                // Active path — boot adoption reaches Active without
+                // passing through `Starting`, and a transition-only
+                // clear left crash-era alerts pinned on healthy services
+                // forever. Idempotent HDEL on the first healthy tick;
+                // the per-tick cost is one HDEL attempt only while an
+                // alert field exists.
+                if let Err(e) = store::clear_alert(conn, &inst.service_type).await {
+                    tracing::debug!(error = ?e, service = %inst.service_type, "alert clear failed");
+                }
                 // Cooldown reset: if healthy for > cooldown_reset_s, reset restarts.
                 let healthy_for_s = win.started_ticks as i64 * config.monitor_tick_s as i64;
                 if cooldown_due(healthy_for_s, cooldown_reset_s, inst.restarts) {
@@ -821,6 +886,55 @@ fn spawn_last_resort_respawner(
                 else {
                     continue;
                 };
+                // DUPROW-1 (DESIGN §5.10.2, "check the live process, not
+                // just the row"): no live row ≠ no live process. A row-less
+                // orphan (its row deleted by an earlier give-up while it
+                // kept serving) is ADOPTED — registry row re-created at its
+                // live port — instead of spawning a duplicate instance.
+                let expected_binary = crate::server::expected_binary_for(
+                    &alert.service_type,
+                    Some(&entry),
+                );
+                if let Some((port, pid)) = crate::server::find_rowless_live_service(
+                    &alert.service_type,
+                    &expected_binary,
+                    config.port_range,
+                ) {
+                    let adopted_row = crate::store::ServiceInstance {
+                        key: crate::store::ServiceInstance::make_key(
+                            &alert.service_type,
+                            &config.local_ip,
+                            port,
+                        ),
+                        service_type: alert.service_type.clone(),
+                        local_ip: config.local_ip.clone(),
+                        local_port: port,
+                        pid,
+                        start_priority: entry.start_priority,
+                        cpu_avg_1m: 0.0,
+                        memory_avg_1m: 0.0,
+                        rss_mb_avg_1m: 0.0,
+                        latency_avg_1m_ms: 0.0,
+                        last_health_check: Some(chrono::Utc::now().timestamp()),
+                        status: "Active".to_string(),
+                        restarts: 0,
+                        started_at: None,
+                        version: String::new(),
+                        build_hash: String::new(),
+                        errors: 0,
+                        warnings: 0,
+                        api_calls: 0,
+                    };
+                    if crate::store::upsert_instance(&c, &adopted_row).await.is_ok() {
+                        tracing::warn!(
+                            service = %alert.service_type,
+                            port,
+                            pid,
+                            "captain: last-resort respawn found a live row-less instance — adopted, no duplicate spawned"
+                        );
+                    }
+                    continue;
+                }
                 tracing::warn!(
                     service = %alert.service_type,
                     interval_s = config.last_resort_respawn_s,

@@ -919,7 +919,7 @@ struct AdoptedInstance {
 /// convention is `{workspace}::{leaf}` crates producing binaries named
 /// without the workspace prefix (`bank8:ledger` → `bank8-ledger`).
 /// SELFUP-: a catalog-unknown type is adopt-eligible, never kill-eligible.
-fn expected_binary_for(
+pub(crate) fn expected_binary_for(
     service_type: &str,
     entry: Option<&crate::catalog::ServiceCatalogEntry>,
 ) -> String {
@@ -986,7 +986,18 @@ async fn reconcile_existing(
     let mut adopted: std::collections::HashMap<String, AdoptedInstance> =
         std::collections::HashMap::new();
     for inst in &existing {
-        if inst.status == "Started" || inst.status == "Active" {
+        // DUPROW-1 (DESIGN §5.10.2): `Starting` rows are adoptable too.
+        // A last-resort/self-heal spawn whose captain died before its
+        // monitor tick promoted the row is a LIVE orphan in `Starting` —
+        // excluding it here left it invisible to adoption, and the boot
+        // spawn loop then minted a duplicate instance for the type. All
+        // live-pid, non-terminal rows are classified by the same
+        // binary-identity rule; a `Starting` row with a DEAD pid falls
+        // through to the crash-reconcile (Killed + deleted) below.
+        if inst.status == "Started"
+            || inst.status == "Active"
+            || inst.status == "Starting"
+        {
             let pid = inst.pid;
             if pid != 0 && !crate::procfs::pid_alive(pid) {
                 let _ = store::mark_killed(conn, inst).await;
@@ -1028,10 +1039,39 @@ async fn reconcile_existing(
                     );
                     continue;
                 }
-                // Adopt: correct the row's port when the recorded port no
-                // longer matches the process's actual listener (stale rows
-                // from prior rolling upgrades), then re-key + publish.
-                let actual_port = listen_port_of(pid).unwrap_or(inst.local_port);
+                // Adopt: correct the row's port to the AUTHORITY port
+                // when one exists (DUPROW-1 seam 5, DESIGN §5.10.2 —
+                // the port-25 trap). Rule order:
+                // (a) catalog `fixed_port` + the process holds it →
+                //     re-key to the fixed port (the declared health
+                //     surface — a row parked on a protocol port like
+                //     gate's SMTP 25 gets healed to 8103);
+                // (b) recorded port + the process holds it → TRUST the
+                //     recorded port (multi-listener services must not
+                //     be re-keyed to their LOWEST listener);
+                // (c) neither → lowest-listener fallback (stale rows
+                //     from prior rolling upgrades).
+                let entry_ref = config.catalog.get(&inst.service_type);
+                let mut actual_port = inst.local_port;
+                if let Some(fixed) = entry_ref.and_then(|e| {
+                    let fp = e.fixed_port;
+                    (fp > 0).then_some(fp)
+                }) {
+                    let holder = pid_on_port(fixed);
+                    if holder == Some(pid) {
+                        actual_port = fixed;
+                    }
+                }
+                if actual_port == inst.local_port {
+                    let recorded_port_serves = server_pid_on_port_or_expected(
+                        inst.local_port,
+                        &expected_binary,
+                        pid,
+                    );
+                    if !recorded_port_serves {
+                        actual_port = listen_port_of(pid).unwrap_or(inst.local_port);
+                    }
+                }
                 if actual_port != inst.local_port {
                     let mut corrected = inst.clone();
                     corrected.local_port = actual_port;
@@ -1124,7 +1164,7 @@ unsafe fn kill_signal(pid: u32, sig: i32) -> i32 {
 
 /// Find the PID of the process listening on a TCP port (Linux only).
 /// Returns `None` on non-Linux or if no listener is found.
-fn pid_on_port(port: u16) -> Option<u32> {
+pub(crate) fn pid_on_port(port: u16) -> Option<u32> {
     // Use lsof to find the listener PID. This is more portable than
     // parsing /proc/net/tcp.
     let output = std::process::Command::new("lsof")
@@ -1136,10 +1176,48 @@ fn pid_on_port(port: u16) -> Option<u32> {
     pid_str.parse::<u32>().ok()
 }
 
+/// DUPROW-1 seam 5 helper (DESIGN §5.10.2): does the recorded port hold
+/// a listener owned by THIS process (pid) running the expected binary?
+/// A `true` result means the recorded port is one of the process's own
+/// listeners — the boot sweep must NOT re-key the row away from it.
+pub(crate) fn server_pid_on_port_or_expected(
+    port: u16,
+    expected_binary: &str,
+    pid: u32,
+) -> bool {
+    match pid_on_port(port) {
+        Some(holder) => holder == pid && is_expected_binary(holder, expected_binary),
+        None => false,
+    }
+}
+
+/// DUPROW-1 (DESIGN §5.10.2, "check the live process, not just the row"):
+/// locate a LIVE, row-less process serving `service_type` by scanning the
+/// port range for a listener whose binary identity matches the type's
+/// expected binary. Used by the last-resort respawner when the registry
+/// shows no live row: a row-less live process is ADOPTED (row re-created)
+/// instead of duplicated by a fresh spawn. The scan is bounded by the
+/// port range and each probe is a single `lsof` call — it runs at most
+/// once per `last_resort_respawn_s` per alerted service.
+pub(crate) fn find_rowless_live_service(
+    _service_type: &str,
+    expected_binary: &str,
+    port_range: (u16, u16),
+) -> Option<(u16, u32)> {
+    for port in port_range.0..=port_range.1 {
+        if let Some(pid) = pid_on_port(port) {
+            if is_expected_binary(pid, expected_binary) {
+                return Some((port, pid));
+            }
+        }
+    }
+    None
+}
+
 /// Check if a PID's process name matches the expected binary name (multi-strategy):
 /// comm, /proc/{pid}/exe symlink target, and the full cmdline (covers cargo-run
 /// wrappers and >15-char comm truncation).
-fn is_expected_binary(pid: u32, expected_binary: &str) -> bool {
+pub(crate) fn is_expected_binary(pid: u32, expected_binary: &str) -> bool {
     #[cfg(target_os = "linux")]
     {
         // /proc/<pid>/comm contains the process name (max 15 chars).

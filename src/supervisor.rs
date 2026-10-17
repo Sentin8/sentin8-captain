@@ -469,8 +469,25 @@ pub async fn self_heal(
             tracing::warn!(error = ?e, service = %instance.service_type, "failed to record the give-up alert");
         }
         alert_service_failed(&instance.service_type, killed.restarts);
+        // DUPROW-1 (DESIGN §5.10.2, "check the live process, not just the
+        // row"): a live SIBLING row of the same service absorbs the
+        // alert's recovery duty — the service is NOT down, and deleting
+        // this row while the sibling serves must not leave the alert
+        // driving the last-resort respawner into minting a duplicate.
+        let siblings = store::list_for_ip(conn, &instance.local_ip)
+            .await
+            .unwrap_or_default();
+        let live_sibling = siblings.iter().any(|s| {
+            s.key != instance.key && s.service_type == instance.service_type && s.pid != 0
+        });
         // Remove the dead instance so its port can be reused.
         let _ = store::delete_instance(conn, instance).await;
+        if live_sibling {
+            tracing::info!(
+                service = %instance.service_type,
+                "give-up: a live sibling instance serves this type — alert stays raised, no duplicate respawn duty"
+            );
+        }
         return Ok(HealAction::Alerted {
             restarts: killed.restarts,
         });
@@ -478,6 +495,29 @@ pub async fn self_heal(
     let backoff_s = backoff_delay_secs(killed.restarts);
     if backoff_s > 0 {
         tokio::time::sleep(Duration::from_secs(backoff_s)).await;
+    }
+    // DUPROW-1 (DESIGN §5.10.2, "check the live process, not just the
+    // row"): a SECOND dead row of the same service must not mint a
+    // duplicate process when a live SIBLING row already serves the
+    // type. Two concurrently-dead rows (the pre-existing doubles; a
+    // kill-loop cycling both) would otherwise EACH self-heal, minting
+    // two fresh processes per cycle forever. The sibling absorbs the
+    // service; THIS row is deleted (the duplicate is worse than the
+    // lost row — the sibling's monitor path keeps the service alive).
+    let siblings = store::list_for_ip(conn, &killed.local_ip)
+        .await
+        .unwrap_or_default();
+    let live_sibling = siblings.iter().any(|s| {
+        s.key != killed.key && s.service_type == killed.service_type && s.pid != 0
+    });
+    if live_sibling {
+        tracing::warn!(
+            service = %killed.service_type,
+            key = %killed.key,
+            "self-heal: a live sibling instance serves this type — deleting the dead duplicate row instead of respawning"
+        );
+        let _ = store::delete_instance(conn, &killed).await;
+        return Ok(HealAction::NoAction);
     }
     // Same-key respawn: carry the consecutive-restart count into the new row
     // (captain DESIGN §8 invariant 10 — a per-spawn zero pinned the counter
