@@ -1669,7 +1669,13 @@ pub(crate) async fn spawn_one_service(
             .map_err(|e| format!("valkey list-for-ip: {e}"))?;
         let used: std::collections::HashSet<u16> = instances.iter().map(|i| i.local_port).collect();
         let mut p = port_range.0;
-        while used.contains(&p) {
+        // RESPAWNPORT-1: the registry's used-set alone is not enough —
+        // a live listener outside the registry (a boot-loop orphan, a
+        // fixed-port service the rows were deleted from) still holds the
+        // port. The boot-spawn path checks `is_port_in_use`; this path
+        // must too, or every last-resort respawn lands on the same
+        // occupied port and bind-fails forever.
+        while used.contains(&p) || crate::server::is_port_in_use(p) {
             p = match p.checked_add(1) {
                 Some(pp) if pp <= port_range.1 => pp,
                 _ => return Err("port range exhausted".to_string()),
