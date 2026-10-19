@@ -3,14 +3,14 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
 // SPDX-License-Identifier: Apache-2.0
 
-//! Bootstrap enrollment credentials — the certificate-bound M2M bootstrap
+//! Bootstrap enrollment credentials - the certificate-bound M2M bootstrap
 //! channel (auth design target state).
 //!
 //! THE PROBLEM: a first-boot workload holds no client certificate, no
 //! client_id, and no token. The shared token path cannot bootstrap it
 //! (chicken-and-egg), and `/v1/client-cert` is guarded so an
 //! anonymous mint is refused. The design answer is "the enroll/bootstrap
-//! flow provisions the workload's initial certificate" — this module is
+//! flow provisions the workload's initial certificate" - this module is
 //! that flow, brokered by captain.
 //!
 //! Captain is the trust anchor for PROCESS identity: it spawns every
@@ -22,10 +22,10 @@
 //! persists it ENCRYPTED (AES-256-GCM via `sentin8-crypto`, key derived
 //! from `SENTIN8_BOOTSTRAP_MASTER_KEY`, falling back to
 //! `SENTIN8_AUTH_MASTER_KEY`) under the run dir (`SENTIN8_RUN_DIR`, dev
-//! `.run/`), mode 0600 — restart-safe across a captain self-upgrade
+//! `.run/`), mode 0600 - restart-safe across a captain self-upgrade
 //! (the successor re-reads the same file).
 //! 2. Captain injects the secret into EVERY child process env as
-//! `SENTIN8_BOOTSTRAP_ENROLLMENT` — acme included — so acme can verify
+//! `SENTIN8_BOOTSTRAP_ENROLLMENT` - acme included - so acme can verify
 //! the claim LOCALLY (no auth round-trip, no chicken-egg).
 //! 3. Acme's `/v1/client-cert` guard admits a request presenting
 //! `X-Sentin8-Bootstrap-Enrollment: <secret>` ONLY for minting
@@ -37,7 +37,7 @@
 //! spawned processes), time-boxed, encrypted at rest, and useless for
 //! anything but enrollment minting. A compromised service holding it can
 //!
-//! - mint client certs for arbitrary workload NAMES — bounded exactly like
+//! - mint client certs for arbitrary workload NAMES - bounded exactly like
 //! the enroll path itself; the DCR scope gate (`service_name` grants)
 //! still decides whether a cert with that CN may register. Rotation is
 //! per captain boot; the file is removed on graceful shutdown.
@@ -47,16 +47,16 @@
 
 // The enrollment claim contract (env names, TTL, freshness check) lives in
 // `sentin8-config::bootstrap` so captain (producer) and acme (verifier)
-// agree on the exact same rules — see the shared module's documentation for
+// agree on the exact same rules - see the shared module's documentation for
 // the trust model. Captain re-exports for its own spawn sites.
 pub use sentin8::config::bootstrap::{claim_is_valid, ENV_ENROLLMENT, ENV_ENROLLMENT_TS};
 
-/// The on-disk credential record (JSON) — encrypted at rest.
+/// The on-disk credential record (JSON) - encrypted at rest.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct EnrollmentRecord {
     /// Hex-encoded 32-byte enrollment secret.
     secret: String,
-    /// Generation timestamp (unix seconds) — expiry anchor.
+    /// Generation timestamp (unix seconds) - expiry anchor.
     generated_at: i64,
 }
 
@@ -76,7 +76,7 @@ pub fn ensure_enrollment() -> anyhow::Result<(String, i64)> {
         // TTL expired. RE-STAMP (keep the secret, bump the timestamp,
         // re-seal) rather than generating a new secret: every already-
         // spawned workload holds the spawn-time env copy, and a NEW secret
-        // would orphan them — acme verifies the caller's claim against the
+        // would orphan them - acme verifies the caller's claim against the
         // CURRENT record, so a rotation invalidates every live first-boot
         // caller until it respawns (: mid-boot rotation
         // 401'd every bearer-less DCR caller for the rest of the window).
@@ -84,7 +84,7 @@ pub fn ensure_enrollment() -> anyhow::Result<(String, i64)> {
         // (`claim_is_valid`), so re-stamping keeps the rotation semantics
         // (old claims expire) while keeping the fleet's outstanding env
         // copies valid.
-        tracing::info!("bootstrap enrollment credential expired — re-stamping");
+        tracing::info!("bootstrap enrollment credential expired - re-stamping");
         let now = chrono::Utc::now().timestamp();
         write_record(&path, &secret, now)?;
         return Ok((secret, now));
@@ -111,7 +111,7 @@ fn master_key() -> anyhow::Result<sentin8::crypto::MasterKey> {
         .or_else(|| std::env::var("SENTIN8_AUTH_MASTER_KEY").ok())
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "no master key for the bootstrap enrollment credential — set \
+                "no master key for the bootstrap enrollment credential - set \
                  SENTIN8_BOOTSTRAP_MASTER_KEY (or SENTIN8_AUTH_MASTER_KEY)"
             )
         })?;
@@ -130,7 +130,7 @@ fn read_record(path: &std::path::Path) -> Option<(String, String)> {
 }
 
 /// Encrypt + write the enrollment record (0600 file; the run dir is
-/// host-local). `sentin8-crypto` has no string seal — use `seal` over the
+/// host-local). `sentin8-crypto` has no string seal - use `seal` over the
 /// JSON bytes.
 fn write_record(path: &std::path::Path, secret: &str, generated_at: i64) -> anyhow::Result<()> {
     let record = serde_json::json!({ "secret": secret, "generated_at": generated_at });
@@ -149,7 +149,7 @@ fn write_record(path: &std::path::Path, secret: &str, generated_at: i64) -> anyh
     Ok(())
 }
 
-/// Remove the enrollment credential (graceful shutdown — the next boot
+/// Remove the enrollment credential (graceful shutdown - the next boot
 /// generates a fresh one; a leaked file must never outlive the fleet).
 pub fn clear_enrollment() {
     let path = enrollment_path();
@@ -158,12 +158,12 @@ pub fn clear_enrollment() {
     }
 }
 
-/// TTL rotation — re-stamp the record BEFORE the TTL expires, keeping the
+/// TTL rotation - re-stamp the record BEFORE the TTL expires, keeping the
 /// same secret (see `ensure_enrollment`'s expiry branch for why the secret
 /// is never rotated under a live fleet). Called from the monitor tick
 /// (captain DESIGN §7 task topology): `ensure_enrollment` alone runs only
 /// at boot/spawn, so after the first TTL window acme rejected every
-/// bearer-less first-boot DCR with 401 — the record on disk was stale,
+/// bearer-less first-boot DCR with 401 - the record on disk was stale,
 /// `claim_is_valid` failed, and the caller holds no bearer to fall back on
 /// (CAPT-ENROLL-1: the sys→auth provisioning Flow failed permanently and
 /// org creation 403'd every CLI verify). Idempotent: a fresh record is
@@ -176,7 +176,7 @@ pub fn restamp_enrollment_if_expiring() {
     };
     let ts: i64 = ts_str.parse().unwrap_or(0);
     if sentin8::config::bootstrap::claim_is_valid(&secret, ts) {
-        // Fresh enough — the renewal margin below is what drives re-stamps;
+        // Fresh enough - the renewal margin below is what drives re-stamps;
         // a still-valid record needs no write this tick.
         let now = chrono::Utc::now().timestamp();
         let age = now - ts;

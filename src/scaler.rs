@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
 // SPDX-License-Identifier: Apache-2.0
 
-//! Auto-scaler — scale-up and scale-down. Runs on every monitor tick.
+//! Auto-scaler - scale-up and scale-down. Runs on every monitor tick.
 //!
 //! **Scale-up**: a service type is busy if ALL its `Active` instances have
 //! been over the busy thresholds continuously for > `BUSY_WINDOW_S`. If the
@@ -58,7 +58,7 @@ pub fn is_idle(inst: &ServiceInstance) -> bool {
         && inst.latency_avg_1m_ms < crate::catalog::IDLE_LATENCY_MS
 }
 
-/// LIFO retirement seam: pick the scale-down target — the most-recently
+/// LIFO retirement seam: pick the scale-down target - the most-recently
 /// started non-base instance (base = lowest port for this service type).
 /// Returns `None` when only the base instance exists or no candidate has
 /// a live pid.
@@ -102,7 +102,7 @@ pub async fn evaluate(
     let instances = store::list_for_ip(conn, &config.local_ip).await?;
 
     // Group active instances by service type. The monitor promotes
-    // `Starting` → `Active` in one tick — `Started` is never produced
+    // `Starting` → `Active` in one tick - `Started` is never produced
     // so the scaler's busy/idle decisions run over `Active` instances.
     let mut by_type: HashMap<String, Vec<ServiceInstance>> = HashMap::new();
     for inst in &instances {
@@ -128,7 +128,7 @@ pub async fn evaluate(
     for (service_type, started) in &by_type {
         let entry = match config.catalog.get(service_type) {
             // Placement gate (FLEET-1, DESIGN §11.3): the scaler has no
-            // machine choice to make — a constrained service that does not
+            // machine choice to make - a constrained service that does not
             // admit a second instance on THIS machine (pin to elsewhere,
             // anti violated, singleton) never scales here. Multi-machine
             // placement is the provisioner + remote-spawn plane's job.
@@ -149,7 +149,7 @@ pub async fn evaluate(
                         service = %service_type,
                         placement = %e.placement,
                         reason = refusal.as_str(),
-                        "scaler: placement-constrained service — scale-up skipped"
+                        "scaler: placement-constrained service - scale-up skipped"
                     );
                     continue;
                 }
@@ -186,7 +186,7 @@ pub async fn evaluate(
                 // Auto-assign the next free port from the GLOBAL range
                 // (config.port_range), not a per-service range. The second
                 // instance of any service gets the next available port
-                // globally — ports are shared across all services on this
+                // globally - ports are shared across all services on this
                 // machine.
                 if let Some(port) = next_free_port(conn, &config.local_ip, config.port_range).await
                 {
@@ -205,7 +205,7 @@ pub async fn evaluate(
                         status: "Starting".to_string(),
                         restarts: 0,
                         started_at: None,
-                        // CAPTAIN-10: empty seed — captured by the first probe.
+                        // CAPTAIN-10: empty seed - captured by the first probe.
                         version: String::new(),
                         build_hash: String::new(),
                         errors: 0,
@@ -255,7 +255,7 @@ pub async fn evaluate(
                     if idle_for >= crate::catalog::IDLE_WINDOW_S {
                         // LIFO: retire the most-recently-scaled instance,
                         // but never the base instance (the one with the
-                        // lowest port for this service type — it was the
+                        // lowest port for this service type - it was the
                         // first to be auto-assigned).
                         if let Some(target) = lifo_target(started) {
                             let pid = target.pid;
@@ -310,7 +310,7 @@ pub async fn next_free_port(
     range: (u16, u16),
 ) -> Option<u16> {
     let instances = store::list_for_ip(conn, local_ip).await.ok()?;
-    // Only live instances occupy a port — Stopped/Killed instances have
+    // Only live instances occupy a port - Stopped/Killed instances have
     // been (or are about to be) deleted, so their ports are reusable.
     let used: std::collections::HashSet<u16> = instances
         .iter()
@@ -320,7 +320,7 @@ pub async fn next_free_port(
     pick_free_port(&used, range, crate::server::is_port_in_use)
 }
 
-/// Reservation TTL — a crashed upgrade self-releases after this window.
+/// Reservation TTL - a crashed upgrade self-releases after this window.
 /// Upgrades normally release their reservation as soon as the spawned
 /// instance is registered (the registry row then guards the port) or on
 /// any abort path.
@@ -342,7 +342,7 @@ pub async fn release_reserved_port(conn: &glide::GlideClient, local_ip: &str, po
 /// .
 ///
 /// `next_free_port` alone is scan-then-spawn: two concurrent upgrades can
-/// both observe the same free port and collide — every spawn fails to
+/// both observe the same free port and collide - every spawn fails to
 /// bind and the upgrades abort with `did not become Active` while the
 /// monitor crash-loops the children. This wrapper adds a Valkey
 /// reservation (`SET NX EX captain:port:reserve:{ip}:{port}`) on top of
@@ -367,7 +367,7 @@ pub async fn reserve_free_port(
         if used.contains(&port) || crate::server::is_port_in_use(port) {
             continue;
         }
-        // Atomic acquire — concurrent upgrades cannot take the same port.
+        // Atomic acquire - concurrent upgrades cannot take the same port.
         let key = format!("captain:port:reserve:{}:{}", local_ip, port);
         let acquired: Option<()> = glide::cmd("SET")
             .arg(&key)

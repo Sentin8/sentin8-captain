@@ -6,9 +6,9 @@
 //! `orch_services` registry stored in Valkey.
 //!
 //! Valkey data model:
-//! - Key `captain:svc:{service_type}` — HASH, field = `{ip}:{port}`,
+//! - Key `captain:svc:{service_type}` - HASH, field = `{ip}:{port}`,
 //! value = JSON blob of the instance.
-//! - Pub/sub channel `captain:changed` — Captain PUBLISHes on any change,
+//! - Pub/sub channel `captain:changed` - Captain PUBLISHes on any change,
 //! consumers (Proxy, TLS) SUBSCRIBE to get push notifications.
 //! - Advisory lock: `SETNX captain:lock:{ip}` with TTL.
 //!
@@ -57,9 +57,9 @@ pub struct ServiceInstance {
     /// The version.
     pub version: String,
     /// Compile-time build hash (from the service's health payload `build`
-    /// field — captured by the monitor). Shown as `{version}.{build_hash}`
+    /// field - captured by the monitor). Shown as `{version}.{build_hash}`
     /// in `make status` / the Dash so operators can verify WHICH binary is
-    /// actually running — a stale binary can silently serve. serde-default:
+    /// actually running - a stale binary can silently serve. serde-default:
     /// older registry entries parse without it.
     #[serde(default)]
     /// The build hash.
@@ -98,11 +98,11 @@ impl ServiceInstance {
 /// Handle upsert instance.
 ///
 /// This is the CHANGE path (FIREHOSE-1): publishes `captain:changed` so
-/// subscribers (service-discovery, the CLI) re-scan the registry — reserve
+/// subscribers (service-discovery, the CLI) re-scan the registry - reserve
 /// it for membership/identity/lifecycle changes (spawn, status, port).
 /// Routine metrics writes go through [`upsert_metrics`], which stays
 /// silent: the monitor updates every instance's metrics every tick, and a
-/// notification per write is a 20 msg/s × 60-service fanout firehose —
+/// notification per write is a 20 msg/s × 60-service fanout firehose -
 /// measured as ~5,000 TLS-decrypted allocations/s per idle service
 /// (heaptrack, MTALEAK-1) and the root cause of the fleet-wide idle-CPU
 /// and RSS-drift baselines.
@@ -128,7 +128,7 @@ pub async fn upsert_metrics(
     Ok(())
 }
 
-/// Fetch a single instance by its registry identity — HASH
+/// Fetch a single instance by its registry identity - HASH
 /// `captain:svc:{service_type}`, FIELD `{ip}:{port}` (the same shape
 /// [`upsert_instance`] writes and every list helper reads). Returns `None`
 /// when the service type has no row yet or the field is absent.
@@ -136,7 +136,7 @@ pub async fn upsert_metrics(
 /// The tier gate (D6) MUST consult instances through this helper: a bare
 /// `GET "{ip}:{port}"` reads a string key that NEVER exists (the registry
 /// is hash-shaped), so the gate polled `nil` every second and degraded
-/// every boot to its full timeout — five wasted 60s waits per boot.
+/// every boot to its full timeout - five wasted 60s waits per boot.
 pub async fn get_instance(
     conn: &glide::GlideClient,
     service_type: &str,
@@ -152,7 +152,7 @@ pub async fn get_instance(
 /// One service alert: a service that exhausted its restart budget (or any
 /// other operator-actionable failure). Stored as HASH `captain:alerts`,
 /// field `service_type` → JSON. The startup stream attaches them to its
-/// progress payloads and the CLI prints them — a crash-looping service is
+/// progress payloads and the CLI prints them - a crash-looping service is
 /// a FIRST-CLASS event, not a line in captain.log. Cleared when the
 /// service next reaches `Active` (self-heal succeeded) and by the daily
 /// display-counter reset.
@@ -162,7 +162,7 @@ pub struct ServiceAlert {
     pub service_type: String,
     /// Restart count at give-up (MAX_RESTARTS).
     pub restarts: i32,
-    /// Why the operator must intervene — human-readable.
+    /// Why the operator must intervene - human-readable.
     pub reason: String,
     /// Where to look: the service's log path.
     pub log_path: String,
@@ -174,7 +174,7 @@ fn alerts_key() -> &'static str {
     "captain:alerts"
 }
 
-/// Record a service alert (idempotent per service — the field overwrites).
+/// Record a service alert (idempotent per service - the field overwrites).
 pub async fn record_alert(
     conn: &glide::GlideClient,
     alert: &ServiceAlert,
@@ -260,7 +260,7 @@ pub async fn list_all(
 
 /// List all `Active` instances with a fresh health check for a given
 /// service type (for consumers like Proxy, TLS). Only `Active` instances
-/// are traffic-ready — `Started` is a transient state that is excluded.
+/// are traffic-ready - `Started` is a transient state that is excluded.
 #[allow(dead_code)]
 /// List active for type.
 pub async fn list_active_for_type(
@@ -322,7 +322,7 @@ pub async fn mark_starting(
     upsert_instance(conn, &inst).await
 }
 
-/// Mark an instance `Started` (transient state — first healthy probe).
+/// Mark an instance `Started` (transient state - first healthy probe).
 /// Currently unused: the monitor goes directly from `Starting` to `Active`
 /// on the first healthy probe. Kept for future use (e.g. staged rollouts).
 #[allow(dead_code)]
@@ -334,7 +334,7 @@ pub async fn mark_started(
     set_status(conn, inst, "Started").await
 }
 
-/// Mark an instance `Active` (confirmed healthy — traffic-ready).
+/// Mark an instance `Active` (confirmed healthy - traffic-ready).
 /// TLS and Proxy only send traffic to `Active` instances.
 /// Handle mark active.
 pub async fn mark_active(
@@ -344,7 +344,7 @@ pub async fn mark_active(
     set_status(conn, inst, "Active").await
 }
 
-/// Mark an instance `Inactive` (drain — TLS/Proxy stop sending new traffic).
+/// Mark an instance `Inactive` (drain - TLS/Proxy stop sending new traffic).
 /// Handle mark inactive.
 pub async fn mark_inactive(
     conn: &glide::GlideClient,
@@ -370,13 +370,13 @@ pub async fn update_metrics(
     inst.latency_avg_1m_ms = latency_avg_1m_ms;
     inst.last_health_check = Some(chrono::Utc::now().timestamp());
     // ORPHANLOOP-1 (DESIGN §5.10.2b): the metrics upsert is a WHOLE-ROW
-    // HSET — writing the TICK SNAPSHOT here would clobber concurrent row
+    // HSET - writing the TICK SNAPSHOT here would clobber concurrent row
     // surgery (an adoption between the tick's list and this write
     // re-inserted the stale pid and resurrected the split-brain). RE-READ
     // the live row first and carry ITS identity fields (pid/status/
     // restarts/started_at); only the metrics fields ride the snapshot. A
     // row that vanished under the tick (stop/upgrade/give-up) is not
-    // resurrected — its owner handled cleanup.
+    // resurrected - its owner handled cleanup.
     let live = get_instance(conn, &inst.service_type, &inst.key).await?;
     let target = match live {
         Some(fresh) => {
@@ -389,19 +389,19 @@ pub async fn update_metrics(
         }
         None => return Ok(()),
     };
-    // FIREHOSE-1: metrics samples ride the SILENT upsert — a publish here
+    // FIREHOSE-1: metrics samples ride the SILENT upsert - a publish here
     // fired `captain:changed` ~20x/s (once per instance per monitor tick),
     // and every subscriber's discovery loop answered each message with a
     // full 61-command registry re-scan (~18,300 commands/s fleet-wide at
     // 60 services; heaptrack-confirmed ~5,000 TLS-decrypt allocations/s
-    // per idle service — MTALEAK-1's root cause).
+    // per idle service - MTALEAK-1's root cause).
     upsert_metrics(conn, &target).await
 }
 
 /// Mark an instance `Killed` and increment `restarts`, returning the
 /// UPDATED instance (captain DESIGN §8 invariant 10): the monitor's
 /// snapshot predates the increment, so callers that respawn from the
-/// snapshot would re-seed the counter with the pre-increment value —
+/// snapshot would re-seed the counter with the pre-increment value -
 /// the count never grew, `MAX_RESTARTS` was unreachable, and a boot
 /// panic crash-looped a service every ~6s indefinitely (21k spawns,
 /// zero give-up alerts).
@@ -450,13 +450,13 @@ pub async fn reset_restarts(
     upsert_instance(conn, &inst).await
 }
 
-/// Reset the per-day display counters — `restarts`, `errors`, and
-/// `warnings` — to 0 for every instance owned by this captain (on
+/// Reset the per-day display counters - `restarts`, `errors`, and
+/// `warnings` - to 0 for every instance owned by this captain (on
 /// `local_ip`). Called once per day by the monitor's daily-reset task so
 /// that the `RST`/`ERR`/`WRN` columns in `make status` show a rolling
 /// 24-hour window rather than lifetime totals.
 ///
-/// `api_calls` is **not** reset here — it is overwritten every 60s by the
+/// `api_calls` is **not** reset here - it is overwritten every 60s by the
 /// traffic metrics subscriber from Stat's `stat:rollups:day`
 /// channel, which already provides a true rolling 24-hour aggregate.
 ///
@@ -491,7 +491,7 @@ pub async fn reset_daily_counters(
 /// Read-modify-write: the caller's `inst` may be a stale snapshot (the
 /// monitor holds the pre-tick record while `update_metrics` just wrote
 /// fresh averages), so re-read the stored entry and change only `version`
-/// / `build_hash` on it — writing the caller's snapshot wholesale would
+/// / `build_hash` on it - writing the caller's snapshot wholesale would
 /// clobber the metrics. (Surfaced by the TEST-3 registry roundtrip test.)
 /// Update version build.
 pub async fn update_version_build(
@@ -501,7 +501,7 @@ pub async fn update_version_build(
     build: Option<&str>,
 ) -> Result<(), glide::GlideError> {
     // CAPTAIN-4: store both the version and the build hash so `make
-    // status`/Dash can show `{version}.{build_hash}` — verifying WHICH
+    // status`/Dash can show `{version}.{build_hash}` - verifying WHICH
     // binary is running requires both.
     let version = version.unwrap_or("");
     let build_hash = build.unwrap_or("");
@@ -511,7 +511,7 @@ pub async fn update_version_build(
     let all = list_for_ip(conn, &inst.local_ip).await?;
     let current = match all.iter().find(|i| i.key == inst.key) {
         Some(fresh) => fresh.clone(),
-        None => return Ok(()), // entry removed meanwhile — nothing to update
+        None => return Ok(()), // entry removed meanwhile - nothing to update
     };
     let mut inst = current;
     inst.version = version.to_string();
@@ -522,8 +522,8 @@ pub async fn update_version_build(
 /// **Overwrite** the error/warning counts for all instances of a service
 /// type on a given IP. Called by the rollup metrics subscriber when
 /// Stat publishes a rolling 24-hour snapshot to
-/// `stat:rollups:day`. The snapshot is authoritative — it is not a
-/// delta — so the stored value is replaced, not accumulated.
+/// `stat:rollups:day`. The snapshot is authoritative - it is not a
+/// delta - so the stored value is replaced, not accumulated.
 /// Handle set error warning counts.
 pub async fn set_error_warning_counts(
     conn: &glide::GlideClient,
@@ -609,14 +609,14 @@ pub async fn try_advisory_lock(
             if existing_pid != 0 && !crate::procfs::pid_alive(existing_pid) {
                 tracing::warn!(
                     existing_pid,
-                    "advisory lock held by dead process — stealing lock"
+                    "advisory lock held by dead process - stealing lock"
                 );
                 let _: () = conn.del(&key).await?;
             }
         }
     }
 
-    // Try to acquire the lock (30s TTL — short enough to auto-expire
+    // Try to acquire the lock (30s TTL - short enough to auto-expire
     // if captain crashes, long enough for a clean restart).
     let result: Option<String> = glide::cmd("SET")
         .arg(&key)

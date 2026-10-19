@@ -14,7 +14,7 @@ use crate::catalog::ServiceCatalogEntry;
 ///
 /// All `SENTIN8_CAPTAIN_*` env vars override the defaults. The catalog is
 /// seeded with the standard Sentin8 service set (see `default_catalog`) and
-/// extended by every external `SENTIN8_CAPTAIN_CATALOG_PATHS` entry — the
+/// extended by every external `SENTIN8_CAPTAIN_CATALOG_PATHS` entry - the
 /// catalog is ALWAYS the full union. `SENTIN8_SERVICES` (comma-separated
 /// colon identities) is the **boot-spawn allow-list** (`boot_allow`): it
 /// filters which tiers the boot spawn starts, never the catalog contents
@@ -35,13 +35,13 @@ pub struct CaptainConfig {
     /// The local ip.
     pub local_ip: String,
     /// Static service catalog: `service_type -> ServiceCatalogEntry`.
-    /// Always the FULL union (built-in + external) — never pruned by
-    /// SENTIN8_SERVICES (a boot-spawn filter, not a catalog prune — §3).
+    /// Always the FULL union (built-in + external) - never pruned by
+    /// SENTIN8_SERVICES (a boot-spawn filter, not a catalog prune - §3).
     /// The catalog.
     pub catalog: HashMap<String, ServiceCatalogEntry>,
     /// Boot-spawn allow-list from `SENTIN8_SERVICES` (colon-canonical).
     /// `None` = boot spawns the whole catalog. Consulted ONLY by the boot
-    /// spawn loop — never by the API handlers (they resolve the live
+    /// spawn loop - never by the API handlers (they resolve the live
     /// catalog).
     /// The boot spawn allow-list.
     pub boot_allow: Option<std::collections::HashSet<String>>,
@@ -59,10 +59,10 @@ pub struct CaptainConfig {
     /// The cooldown reset s.
     pub cooldown_reset_s: i64,
     /// TLS-cert warm-up grace: a LIVE process whose probes fail with a
-    /// TLS warm-up signature — its on-demand server cert has not landed
+    /// TLS warm-up signature - its on-demand server cert has not landed
     /// from acme yet (alert `AccessDenied`, certificate/handshake error
     /// text, or a connect-level failure while the resolver waits for the
-    /// first cert) — is not killed for `cert_grace_s` seconds since
+    /// first cert) - is not killed for `cert_grace_s` seconds since
     /// start (default 120s). Fresh installs during fleet-wide cold
     /// starts / retry storms previously got mass-killed after 3 failed
     /// probes while their cert fetch was still queued behind the storm
@@ -71,7 +71,7 @@ pub struct CaptainConfig {
     pub cert_grace_s: i64,
     /// After MAX_RESTARTS give-up, captain keeps ONE slow last-resort
     /// respawn attempt per interval (default 300s) for every alerted
-    /// service — an operator-away failure self-recovers instead of
+    /// service - an operator-away failure self-recovers instead of
     /// staying parked until manual intervention (the alert stays raised
     /// until the service reaches Active, which clears it). 0 disables
     /// (the manual-intervention-parked give-up semantics)
@@ -90,22 +90,22 @@ pub struct CaptainConfig {
     /// (`sentin8::config::port_pool_low` = base+2). The first service
     /// instance gets base+2, the next base+3, etc. When scaling up a
     /// service to a second instance, Captain picks the next free port in
-    /// this range — NOT a per-service range — so the global port space is
+    /// this range - NOT a per-service range - so the global port space is
     /// shared across all services on this machine.
     pub port_range: (u16, u16),
     /// Machine auto-provisioning profile. `Auto` (default)
     /// enables the cluster-autoscaler role up to `MAX_MACHINES` with cooldown
-    /// and scale-in — with the default `noop` backend that is a dry-run.
+    /// and scale-in - with the default `noop` backend that is a dry-run.
     /// `Manual` requires operator approval; `Never` disables the role.
     pub provision_profile: crate::provision::ProvisionProfile,
     /// Provisioner backend selector. `noop` (default) is
     /// dry-run; `cloud`/`hypervisor`/`bare-metal` all execute OpenTofu
     /// (`tofu apply`) against the module dir `SENTIN8_CAPTAIN_TOFU_DIR`.
     pub provision_backend: String,
-    /// Fleet-wide machine cap — the autoscaler never provisions beyond this.
+    /// Fleet-wide machine cap - the autoscaler never provisions beyond this.
     /// Maximum machines.
     pub max_machines: u32,
-    /// Fleet-wide machine floor — scale-in never deprovisions below this.
+    /// Fleet-wide machine floor - scale-in never deprovisions below this.
     /// Minimum machines.
     pub min_machines: u32,
     /// Sustained-saturation window (seconds) before provisioning a machine.
@@ -131,7 +131,7 @@ impl CaptainConfig {
         });
 
         let mut catalog = default_catalog();
-        // SENTIN8_SERVICES: comma-separated colon-identity allow-list — a
+        // SENTIN8_SERVICES: comma-separated colon-identity allow-list - a
         // BOOT-SPAWN FILTER, not a catalog prune (DESIGN §3 "Catalog and
         // the boot-spawn filter"). When set, the boot spawn loop starts
         // ONLY those services (dev trimmed boots / fleet-subset machines);
@@ -140,12 +140,12 @@ impl CaptainConfig {
         // registered type at any time. Accepts the canonical colon
         // identity (`sentin8:auth`), the worker alias
         // (`bank8:payments:w`), and legacy hyphen forms (`sentin8-auth`,
-        // `bank8-payments-worker`) — all canonicalized to the colon form.
+        // `bank8-payments-worker`) - all canonicalized to the colon form.
         // Example: SENTIN8_SERVICES=sentin8:auth,sentin8:bff,sentin8:bus
         //
         // Boot scope default (STARTSCOPE-2, DESIGN §3): when UNSET, boot
         // spawns the PLATFORM services only (`sentin8:*` from the built-in
-        // catalog) — never the external vertical entries. `all` (or an
+        // catalog) - never the external vertical entries. `all` (or an
         // enumerated list) is the explicit opt-in for a full multi-vertical
         // fleet boot; the unset case is overwhelmingly a platform-group
         // `make start`, and silently spawning 100+ vertical services there
@@ -175,7 +175,7 @@ impl CaptainConfig {
         // hotel8, etc.) are registered via catalog.json files, pointed to by
         // the SENTIN8_CAPTAIN_CATALOG_PATHS env var (comma-separated paths).
         //
-        // This keeps sentin8 decoupled from verticals — captain doesn't know
+        // This keeps sentin8 decoupled from verticals - captain doesn't know
         // or care what domains exist. It just reads JSON from given paths.
         if let Ok(paths) = env::var("SENTIN8_CAPTAIN_CATALOG_PATHS") {
             for path in paths.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
@@ -184,9 +184,9 @@ impl CaptainConfig {
                         match serde_json::from_str::<Vec<ServiceCatalogEntry>>(&json) {
                             Ok(entries) => {
                                 for entry in entries {
-                                    // FULL union — never filtered by
+                                    // FULL union - never filtered by
                                     // SENTIN8_SERVICES (boot-spawn filter
-                                    // only — DESIGN §3).
+                                    // only - DESIGN §3).
                                     catalog.insert(entry.service_type.clone(), entry);
                                 }
                                 tracing::info!(
@@ -196,12 +196,12 @@ impl CaptainConfig {
                                 );
                             }
                             Err(e) => {
-                                tracing::warn!(path, error = %e, "failed to parse catalog.json — skipping");
+                                tracing::warn!(path, error = %e, "failed to parse catalog.json - skipping");
                             }
                         }
                     }
                     Err(e) => {
-                        tracing::warn!(path, error = %e, "failed to read catalog.json — skipping");
+                        tracing::warn!(path, error = %e, "failed to read catalog.json - skipping");
                     }
                 }
             }
@@ -209,7 +209,7 @@ impl CaptainConfig {
 
         // TLS-RLS-4 (design/sentin8-vertical-data-plane-contract.md §VDC.7):
         // derive the platform-plane hostname label map from the RUNTIME
-        // CATALOG — registry-driven, zero hardcoded verticals. The
+        // CATALOG - registry-driven, zero hardcoded verticals. The
         // database-free TLS resolver in every spawned service maps
         // `{label}.ops.sys.{domain}` statically from this env var (its
         // core-platform leaf default covers only `sentin8:*` services;
@@ -245,7 +245,7 @@ impl CaptainConfig {
                 .unwrap_or_else(sentin8::config::captain_port),
             valkey_url,
             local_ip: env::var("SENTIN8_CAPTAIN_LOCAL_IP")
-                .expect("SENTIN8_CAPTAIN_LOCAL_IP must be set — pass --local-ip <IP> to 'sentin8 captain start'"),
+                .expect("SENTIN8_CAPTAIN_LOCAL_IP must be set - pass --local-ip <IP> to 'sentin8 captain start'"),
             catalog,
             boot_allow,
             start_concurrency: env::var("SENTIN8_CAPTAIN_START_CONCURRENCY")
@@ -322,7 +322,7 @@ impl CaptainConfig {
 }
 
 /// Normalize a service type token from `SENTIN8_SERVICES` to the canonical
-/// colon identity form (`{vertical}:{service}[:worker]` — see
+/// colon identity form (`{vertical}:{service}[:worker]` - see
 /// `.md` ).
 ///
 /// Accepts:
@@ -338,7 +338,7 @@ fn normalize_service_type(token: &str) -> String {
 
 /// The default Sentin8 service catalog.
 ///
-/// Ports are NOT hardcoded in the catalog — Captain auto-assigns ports
+/// Ports are NOT hardcoded in the catalog - Captain auto-assigns ports
 /// sequentially starting from `SENTIN8_CAPTAIN_PORT_RANGE_LOW` (default
 /// `sentin8::config::port_pool_low` = base+2) at reconcile time. The
 /// `base_port` field in each entry is a hint for documentation only; the
@@ -346,19 +346,19 @@ fn normalize_service_type(token: &str) -> String {
 /// to a second instance, Captain picks the next available port globally
 /// (not a per-service range).
 ///
-/// `start_priority` tiers (lower starts first — see design ):
+/// `start_priority` tiers (lower starts first - see design ):
 /// 0 = sentin8:captain (self-registered, never spawned)
-/// 2 = acme (CA — must be Active before any service requests its cert)
-/// 10 = auth (identity — the only issuer; domain-truth needs it live)
+/// 2 = acme (CA - must be Active before any service requests its cert)
+/// 10 = auth (identity - the only issuer; domain-truth needs it live)
 /// 15 = sys (domain-truth BEFORE any ingress: the proxy resolves tenant
 ///      hostnames via Sys's owner API `GET /v1/resolve/hostname`, and the
 ///      embedded sentin8-tls resolver in every service dials Sys through
-///      the proxy ingress on cache miss — a tenant resolve against a
+///      the proxy ingress on cache miss - a tenant resolve against a
 ///      not-yet-started sys would degrade every tenant SNI in the boot
-///      window; sys's own boot is fail-open — MemBus warm-up spawned,
-///      DCR from the credential store, SSE consumer retries — so early
+///      window; sys's own boot is fail-open - MemBus warm-up spawned,
+///      DCR from the credential store, SSE consumer retries - so early
 ///      start with proxy/bus still down is safe)
-/// 20 = proxy, bus (ingress transport + durable change-signals —
+/// 20 = proxy, bus (ingress transport + durable change-signals -
 ///      proxy's tenant-resolve misses now hit a LIVE sys; everything
 ///      downstream boots through a fully armed ingress)
 /// 30 = storage, db, post, cron, stat, func, flow (middleware)
@@ -366,17 +366,17 @@ fn normalize_service_type(token: &str) -> String {
 /// 50 = bff, web (gateway, web apps)
 /// Captain does NOT supervise DB (PostgreSQL), Valkey, or object storage
 /// those are infrastructure and must be up before Captain starts.
-/// The default Sentin8 service catalog (the platform's spawn truth — the
+/// The default Sentin8 service catalog (the platform's spawn truth - the
 /// fleet placement values it carries are load-bearing, DESIGN §11.3).
 ///
-/// Ports are NOT hardcoded in the catalog — Captain auto-assigns ports
+/// Ports are NOT hardcoded in the catalog - Captain auto-assigns ports
 /// sequentially starting from `SENTIN8_CAPTAIN_PORT_RANGE_LOW` at
 /// reconcile time. When scaling to a second instance, Captain picks the
 /// next available port globally (not a per-service range).
 ///
 /// `start_priority` tiers (lower starts first): 0 captain, 2 acme,
 /// 10 auth, 15 sys, 20 proxy/bus, 30 middleware, 40 app, 50 bff/web.
-/// Captain does NOT supervise PostgreSQL, Valkey, or object storage —
+/// Captain does NOT supervise PostgreSQL, Valkey, or object storage -
 /// those are infrastructure and must be up before Captain starts.
 pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
     let mut m = HashMap::new();
@@ -395,7 +395,7 @@ pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
         singleton: false,
         web_root: String::new(),
     };
-    // Captain itself — not spawned by the catalog (it's already running),
+    // Captain itself - not spawned by the catalog (it's already running),
     // but the monitor loop needs an entry so it samples captain's own
     // CPU/memory and updates the Valkey instance row. Without this,
     // `sentin8 captain services` shows 0.0 CPU / 0 MB for captain.
@@ -419,7 +419,7 @@ pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
             web_root: String::new(),
         },
     );
-    // Tier 1 — ACME must be Active before any other service starts.
+    // Tier 1 - ACME must be Active before any other service starts.
     m.insert(
         "sentin8:acme".into(),
         ServiceCatalogEntry {
@@ -433,7 +433,7 @@ pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
             upgrade_stop_first: false,
             extra_env: Default::default(),
             database_env_vars: Vec::new(),
-            // FLEET-1 (DESIGN §11.3): the CA plane must never fork —
+            // FLEET-1 (DESIGN §11.3): the CA plane must never fork -
             // exactly one acme instance for the whole fleet. The placement
             // gate refuses any second spawn on any machine.
             placement: String::new(),
@@ -441,19 +441,19 @@ pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
             web_root: String::new(),
         },
     );
-    // Tier 2 — identity.
+    // Tier 2 - identity.
     m.insert(
         "sentin8:auth".into(),
         mk("sentin8:auth", "sentin8-auth", 10),
     );
-    // Tier 2b — domain-truth BEFORE the ingress (proxy→sys startup
+    // Tier 2b - domain-truth BEFORE the ingress (proxy→sys startup
     // dependency): the proxy resolves tenant hostnames via Sys's owner
     // API and every service's embedded TLS resolver dials Sys through
-    // the proxy on cache miss — sys must be Active before the ingress
+    // the proxy on cache miss - sys must be Active before the ingress
     // arms. Sys's own boot is fail-open (MemBus warm-up spawned, store-
     // loaded DCR, SSE consumer retries), so proxy/bus being down is safe.
     m.insert("sentin8:sys".into(), mk("sentin8:sys", "sentin8-sys", 15));
-    // Tier 3 — ingress transport + core messaging.
+    // Tier 3 - ingress transport + core messaging.
     m.insert(
         "sentin8:proxy".into(),
         ServiceCatalogEntry {
@@ -469,14 +469,14 @@ pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
             database_env_vars: Vec::new(),
             // FLEET-1 (DESIGN §11.3): the ingress is pinned to the operator's
             // edge machine (`SENTIN8_CAPTAIN_EDGE_IP` on that host) and is a
-            // fleet singleton — one :443 data plane.
+            // fleet singleton - one :443 data plane.
             placement: "pin:edge".into(),
             singleton: true,
             web_root: String::new(),
         },
     );
     m.insert("sentin8:bus".into(), mk("sentin8:bus", "sentin8-bus", 20));
-    // Tier 3 — platform middleware.
+    // Tier 3 - platform middleware.
     m.insert(
         "sentin8:storage".into(),
         mk("sentin8:storage", "sentin8-storage", 30),
@@ -507,11 +507,11 @@ pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
         "sentin8:secrets".into(),
         mk("sentin8:secrets", "sentin8-secrets", 30),
     );
-    // Tier 4 — platform business services.
+    // Tier 4 - platform business services.
     m.insert("sentin8:app".into(), mk("sentin8:app", "sentin8-app", 40));
-    // Tier 5 — BFF + web apps.
+    // Tier 5 - BFF + web apps.
     m.insert("sentin8:bff".into(), mk("sentin8:bff", "sentin8-bff", 50));
-    // Tier 6 — Flutter web apps (single instance serves all apps).
+    // Tier 6 - Flutter web apps (single instance serves all apps).
     m.insert("sentin8:web".into(), mk("sentin8:web", "sentin8-web", 50));
     m
 }

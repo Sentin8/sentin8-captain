@@ -7,7 +7,7 @@
 //! and memory utilization.
 //!
 //! CPU % is computed as the delta of utime+stime (clock ticks) between two
-//! samples, divided by the elapsed wall time, normalised to 0–100.
+//! samples, divided by the elapsed wall time, normalised to 0-100.
 //!
 //! Memory % is `rss / total_system_memory * 100`.
 //!
@@ -17,9 +17,9 @@
 /// Sampled CPU and memory for a pid.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ProcSample {
-    /// CPU utilisation 0–100.
+    /// CPU utilisation 0-100.
     pub cpu_pct: f32,
-    /// Memory utilisation 0–100 (rss / memtotal).
+    /// Memory utilisation 0-100 (rss / memtotal).
     pub mem_pct: f32,
     /// Resident set size in MiB (rss pages × page size / 1 MiB).
     pub rss_mb: f32,
@@ -79,7 +79,7 @@ static PREV_JIFFIES: std::sync::OnceLock<
 /// Diffs `/proc/<pid>/stat` jiffies between consecutive calls (one per
 /// monitor tick, ~10s apart). The first call for a given PID returns
 /// `cpu_pct = 0.0` (no previous sample to diff against). Memory (rss)
-/// is read fresh each call — no sleep needed.
+/// is read fresh each call - no sleep needed.
 ///
 /// This replaces `sample` in the monitor loop, eliminating the 100ms
 /// × N services blocking sleep. The CPU% window now matches the host
@@ -90,7 +90,7 @@ pub fn sample_tick(pid: u32) -> ProcSample {
     let (jiffies, rss_pages) = match read_proc_stat(pid) {
         Some(v) => v,
         None => {
-            // Process gone — clean up its entry.
+            // Process gone - clean up its entry.
             #[cfg(target_os = "linux")]
             {
                 if let Some(mutex) = PREV_JIFFIES.get() {
@@ -103,7 +103,7 @@ pub fn sample_tick(pid: u32) -> ProcSample {
         }
     };
 
-    // Memory — read fresh each call, no sleep needed.
+    // Memory - read fresh each call, no sleep needed.
     let mem_pct = total_system_pages()
         .filter(|t| *t > 0)
         .map(|t| (rss_pages as f32 / t as f32) * 100.0)
@@ -141,7 +141,7 @@ pub fn sample_tick(pid: u32) -> ProcSample {
                     0.0
                 }
             } else {
-                0.0 // first sample — no delta yet
+                0.0 // first sample - no delta yet
             };
             map.insert(pid, (jiffies, now));
             cpu_pct
@@ -172,7 +172,7 @@ pub fn pid_alive(pid: u32) -> bool {
             if let Some((_, rest)) = content.rsplit_once(')') {
                 let state = rest.trim_start().chars().next().unwrap_or(' ');
                 if state == 'Z' {
-                    return false; // zombie — process is dead
+                    return false; // zombie - process is dead
                 }
             }
         }
@@ -206,9 +206,9 @@ unsafe fn libc_kill(pid: u32, sig: i32) -> i32 {
 /// Whole-host CPU and memory snapshot.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct HostSample {
-    /// Total CPU utilisation 0–100 (all cores combined).
+    /// Total CPU utilisation 0-100 (all cores combined).
     pub cpu_pct: f32,
-    /// Total memory utilisation 0–100 (used / memtotal).
+    /// Total memory utilisation 0-100 (used / memtotal).
     pub mem_pct: f32,
     /// Used memory in MiB.
     pub used_mb: f32,
@@ -218,9 +218,9 @@ pub struct HostSample {
 static PREV_CPU: std::sync::OnceLock<std::sync::Mutex<(u64, u64, u64, u64)>> =
     std::sync::OnceLock::new();
 
-/// Telemetry mode (FLEET-5, DESIGN §11.6): `procfs` (default — whole-host
+/// Telemetry mode (FLEET-5, DESIGN §11.6): `procfs` (default - whole-host
 /// `/proc` reads, correct for bare-metal/cloud) or `cgroup` (the
-/// container's OWN cgroup v2 namespace — `/proc/stat` is NOT namespaced,
+/// container's OWN cgroup v2 namespace - `/proc/stat` is NOT namespaced,
 /// so every docker-backend sibling reports host-level saturation in
 /// lockstep; the cgroup read reflects the container). Unrecognized values
 /// fail safe to `procfs`.
@@ -233,10 +233,10 @@ pub fn telemetry_mode() -> &'static str {
 }
 
 /// Sample whole-host CPU and memory. The mode is selected by
-/// [`telemetry_mode`] — see its doc for the cgroup rationale.
+/// [`telemetry_mode`] - see its doc for the cgroup rationale.
 ///
 /// CPU% is computed as the delta of (busy vs total) ticks between two
-/// calls — the first call returns 0.0 because there's no previous sample
+/// calls - the first call returns 0.0 because there's no previous sample
 /// to diff against. Memory is read fresh each call.
 pub fn sample_host() -> HostSample {
     #[cfg(not(target_os = "linux"))]
@@ -253,7 +253,7 @@ pub fn sample_host() -> HostSample {
 }
 
 /// The `procfs` mode (DESIGN §11.6): whole-host `/proc/stat` +
-/// `/proc/meminfo` — the pre-cgroup behavior, default for bare-metal and
+/// `/proc/meminfo` - the pre-cgroup behavior, default for bare-metal and
 /// cloud machines.
 #[cfg(target_os = "linux")]
 fn sample_host_procfs() -> HostSample {
@@ -315,7 +315,7 @@ fn sample_host_procfs() -> HostSample {
 }
 
 /// The `cgroup` mode (FLEET-5, DESIGN §11.6): read the container's OWN
-/// cgroup v2 accounting — `cpu.stat` (usec) for CPU%, `memory.current` +
+/// cgroup v2 accounting - `cpu.stat` (usec) for CPU%, `memory.current` +
 /// `memory.max` for memory. In a container namespace `/proc/stat` reports
 /// the HOST, so sibling containers saturate in lockstep and the
 /// autoscaler's signal is garbage; the cgroup read is the container's

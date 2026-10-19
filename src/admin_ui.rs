@@ -3,23 +3,23 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
 // SPDX-License-Identifier: Apache-2.0
 
-//! Sentin8:Captain Admin UI handlers — RFW definitions for the Dash.
+//! Sentin8:Captain Admin UI handlers - RFW definitions for the Dash.
 //!
 //! Served from `GET /v1/admin/ui/{page}` (page definitions), `GET
 //! /v1/admin/{resource}` (data rows), and `POST /v1/admin/...` (row actions),
-//! rendered by Sentin8:Dash at runtime (RFW — the dash has zero compile-time
+//! rendered by Sentin8:Dash at runtime (RFW - the dash has zero compile-time
 //! knowledge of these pages). The autoscaler overview page surfaces the
 //! machine auto-provisioning state and the manual-profile
 //! pending-approval queue with inline approve/reject row actions.
 //!
 //! Route shape for row actions: the dash renderer substitutes ONLY `{id}`
-//! from the row's `id` field — the pending-request
+//! from the row's `id` field - the pending-request
 //! rows therefore carry a colon-joined `id` = `{kind}:{ip}` so both the
 //! kind and the target IP ride in one path segment.
 //!
 //! Authorization mirrors the management API: the same Shield step-5 gate
 //! (`sentin8:captain:admin`) protects every page, data, and action endpoint
-//! ( — the RCE surface argument applies to the approve action too).
+//! ( - the RCE surface argument applies to the approve action too).
 
 use axum::{
     extract::{Path, State},
@@ -35,19 +35,19 @@ use sentin8::rfw::{page::AdminPage, AdminUiResponse};
 use crate::handlers::AppState;
 use crate::provision;
 
-/// `GET /v1/admin/ui/{page}` — returns the RFW page definition as JSON.
+/// `GET /v1/admin/ui/{page}` - returns the RFW page definition as JSON.
 ///
 /// Pages:
-/// - `overview` — autoscaler state cards (profile, backend, fleet,
+/// - `overview` - autoscaler state cards (profile, backend, fleet,
 ///   leader) + the pending-approval table (manual profile)
-/// - `machines` — per-machine host CPU/mem + saturation flags
+/// - `machines` - per-machine host CPU/mem + saturation flags
 pub async fn get_admin_ui(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(page): Path<String>,
 ) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, String)> {
-    // Step 5 — Shield decides. Same gate as every other
-    // management endpoint — the RFW surface exposes the same approve action
+    // Step 5 - Shield decides. Same gate as every other
+    // management endpoint - the RFW surface exposes the same approve action
     // the HTTP API does, so it must not be weaker.
     crate::handlers::require_captain_policy(&state, &headers).await?;
     crate::handlers::require_captain_policy(&state, &headers).await?;
@@ -57,7 +57,7 @@ pub async fn get_admin_ui(
             .widget(card(
                 "Profile",
                 &format!(
-                    "{} — {}",
+                    "{} - {}",
                     config.provision_profile.as_str(),
                     profile_description(config.provision_profile),
                 ),
@@ -117,12 +117,12 @@ pub async fn get_admin_ui(
     ))
 }
 
-/// `GET /v1/admin/{resource}` — data rows for the admin UI tables.
+/// `GET /v1/admin/{resource}` - data rows for the admin UI tables.
 ///
 /// Resources:
-/// - `autoscaler-pending` — pending provision/deprovision requests
-/// - `autoscaler-machines` — per-machine host samples + saturation
-/// - `autoscaler-status` — one-row summary (profile/backend/fleet/leader)
+/// - `autoscaler-pending` - pending provision/deprovision requests
+/// - `autoscaler-machines` - per-machine host samples + saturation
+/// - `autoscaler-status` - one-row summary (profile/backend/fleet/leader)
 pub async fn get_admin_data(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -137,7 +137,7 @@ pub async fn get_admin_data(
             pending
                 .iter()
                 .map(|p| {
-                    // The row id carries BOTH decision dimensions — the
+                    // The row id carries BOTH decision dimensions - the
                     // renderer substitutes only `{id}` , so
                     // the row-action endpoints split it back apart.
                     serde_json::json!({
@@ -189,8 +189,8 @@ pub async fn get_admin_data(
     Ok(Json(serde_json::Value::Array(rows)))
 }
 
-/// `POST /v1/admin/autoscaler-approve` — row action: approve a pending
-/// request. The row id is `{kind}:{ip}` (colon-joined — the renderer
+/// `POST /v1/admin/autoscaler-approve` - row action: approve a pending
+/// request. The row id is `{kind}:{ip}` (colon-joined - the renderer
 /// substitutes only `{id}`).
 pub async fn approve_row(
     State(state): State<AppState>,
@@ -201,7 +201,7 @@ pub async fn approve_row(
     execute_decision(&state, &headers, &kind, &ip, "approve").await
 }
 
-/// `POST /v1/admin/autoscaler-reject` — row action: reject (discard) a
+/// `POST /v1/admin/autoscaler-reject` - row action: reject (discard) a
 /// pending request. Same `{kind}:{ip}` row-id shape as approve.
 pub async fn reject_row(
     State(state): State<AppState>,
@@ -214,7 +214,7 @@ pub async fn reject_row(
 
 fn split_pending_id(id: &str) -> Result<(String, String), (axum::http::StatusCode, String)> {
     // Split back-to-front: the IP is everything before the FIRST colon
-    // pair boundary — ids are `{kind}:{ip}` and ip itself contains
+    // pair boundary - ids are `{kind}:{ip}` and ip itself contains
     // colons only in IPv6 (not supported by the registry model).
     match id.split_once(':') {
         Some((kind, ip)) if kind == "provision" || kind == "deprovision" => {
@@ -222,7 +222,7 @@ fn split_pending_id(id: &str) -> Result<(String, String), (axum::http::StatusCod
         }
         _ => Err((
             axum::http::StatusCode::BAD_REQUEST,
-            format!("malformed pending-request id `{id}` — expected `{{kind}}:{{ip}}`"),
+            format!("malformed pending-request id `{id}` - expected `{{kind}}:{{ip}}`"),
         )),
     }
 }
@@ -239,10 +239,10 @@ async fn execute_decision(
     provision::approve(&conn, &state.config, kind, ip, decision)
         .await
         .map_err(|e| (axum::http::StatusCode::CONFLICT, e.to_string()))?;
-    // The renderer navigates ONLY on a redirect response — return to the
+    // The renderer navigates ONLY on a redirect response - return to the
     // overview page so the pending table refreshes with the decision
     // applied. (The JSON body of a POST is otherwise ignored by the
-    // renderer — the redirect route IS the success path.)
+    // renderer - the redirect route IS the success path.)
     Ok(Json(
         serde_json::to_value(AdminUiResponse::redirect("overview")).unwrap(),
     ))
@@ -309,13 +309,13 @@ fn row_action_post(label: &str, endpoint: &str) -> WidgetButton {
 fn profile_description(p: provision::ProvisionProfile) -> &'static str {
     match p {
         provision::ProvisionProfile::Auto => {
-            "auto — provisions up to MAX_MACHINES when a machine saturates (dry-run with the noop backend)"
+            "auto - provisions up to MAX_MACHINES when a machine saturates (dry-run with the noop backend)"
         }
         provision::ProvisionProfile::Manual => {
-            "manual — saturation records a pending request; an operator approves below"
+            "manual - saturation records a pending request; an operator approves below"
         }
         provision::ProvisionProfile::Never => {
-            "never — the autoscaler role is inert; saturation stays a log line"
+            "never - the autoscaler role is inert; saturation stays a log line"
         }
     }
 }
@@ -323,11 +323,11 @@ fn profile_description(p: provision::ProvisionProfile) -> &'static str {
 /// Backend description for the overview card.
 fn backend_description(backend: &str) -> String {
     match backend {
-        "noop" => "noop (dry-run) — decisions are recorded and alerted, nothing is created".into(),
+        "noop" => "noop (dry-run) - decisions are recorded and alerted, nothing is created".into(),
         b @ ("cloud" | "hypervisor" | "bare-metal" | "docker") => {
-            format!("{b} — OpenTofu module in SENTIN8_CAPTAIN_TOFU_DIR")
+            format!("{b} - OpenTofu module in SENTIN8_CAPTAIN_TOFU_DIR")
         }
-        other => format!("{other} (unknown — falls back to noop)"),
+        other => format!("{other} (unknown - falls back to noop)"),
     }
 }
 

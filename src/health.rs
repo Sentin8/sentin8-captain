@@ -5,7 +5,7 @@
 
 //! Health probes for supervised services.
 //!
-//! Always probes `https://{sni_host}:{port}{health_path}` — all managed
+//! Always probes `https://{sni_host}:{port}{health_path}` - all managed
 //! services terminate TLS directly. Certificate verification is
 //! **disabled** because Captain pins DNS resolution to the instance IP
 //! via `resolve`, so the connection goes directly to the instance
@@ -19,12 +19,12 @@
 //! target + timeout) and keep **default connection pooling**: the
 //! TCP+TLS session stays warm across monitor ticks, so the probe RTT is
 //! the true request latency (sub-ms loopback) instead of a
-//! post-quantum handshake cost (~40 ms — X25519MLKEM768 + ML-DSA-65).
+//! post-quantum handshake cost (~40 ms - X25519MLKEM768 + ML-DSA-65).
 //! Only a cache miss (e.g. after a service restart) pays the handshake,
 //! amortized by the 6-sample rolling average.
 //!
 //! A pooled connection can outlive a service respawn (SIGKILL + re-bind
-//! on the same port) and surfaces as a stale RST/timeout — the CAPT-6
+//! on the same port) and surfaces as a stale RST/timeout - the CAPT-6
 //! kill spiral. The stale-connection class is handled by **retry-once**:
 //! the first transport failure discards the idle pool and the probe
 //! retries once on a FRESH connection; only the successful attempt's
@@ -55,7 +55,7 @@ pub struct HealthProbe {
     /// The status code.
     pub status_code: Option<u16>,
     /// The failure mode when `ok == false` (transport error string, empty
-    /// on success) — the monitor logs it so a kill decision is auditable.
+    /// on success) - the monitor logs it so a kill decision is auditable.
     pub error: String,
     /// Version reported by the service's health endpoint (if present).
     /// The version.
@@ -64,7 +64,7 @@ pub struct HealthProbe {
     /// The build.
     pub build: Option<String>,
     /// In-flight connection gauge reported by the service's health endpoint
-    /// (`active_connections`, captain README §7) — `None` when the payload does not
+    /// (`active_connections`, captain README §7) - `None` when the payload does not
     /// carry the field (non-gauge service; drain falls back to the fixed
     /// window). Consumed by `supervisor::drain_until_idle`
     /// (captain README §7).
@@ -72,7 +72,7 @@ pub struct HealthProbe {
     pub active_connections: Option<u64>,
     /// TLS handshake time when this probe established a FRESH
     /// connection (cache miss or the retry-after-stale-conn path);
-    /// `None` on a warm pooled connection — the RTT is then pure
+    /// `None` on a warm pooled connection - the RTT is then pure
     /// request latency. CAPT-7: keeps `latency_avg_1m_ms` interpretable
     /// while post-restart handshake samples amortize.
     pub handshake_ms: Option<f32>,
@@ -80,11 +80,11 @@ pub struct HealthProbe {
 /// hostname is the service's domain name and the TCP connection goes
 /// directly to the instance, NOT through the proxy.
 ///
-/// When `use_http` is true (e.g. acme — a bootstrap service that
+/// When `use_http` is true (e.g. acme - a bootstrap service that
 /// serves plain HTTP), the probe uses HTTP instead of HTTPS.
 ///
 /// `service_type` is the service identity (e.g. `sentin8:bus`,
-/// `hotel8:pms`, `bank8:payments:worker` — colon form). The SNI
+/// `hotel8:pms`, `bank8:payments:worker` - colon form). The SNI
 /// hostname uses the DNS label: the identity is converted to its dash
 /// form and stripped of the `sentin8-` prefix for platform services
 /// (e.g. `sentin8:bus` → `bus`, `bank8:pms` → `bank8-pms`). Workers
@@ -94,7 +94,7 @@ pub struct HealthProbe {
 /// Process-lifetime cache of probe clients, keyed by
 /// `(use_http, sni_host, socket_addr, timeout_ms)`. Reusing one
 /// `reqwest::Client` per probe target lets its connection pool keep the
-/// TCP+TLS session warm between monitor ticks — see the module doc.
+/// TCP+TLS session warm between monitor ticks - see the module doc.
 fn probe_clients() -> &'static Mutex<HashMap<String, reqwest::Client>> {
     static CLIENTS: OnceLock<Mutex<HashMap<String, reqwest::Client>>> = OnceLock::new();
     CLIENTS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -143,7 +143,7 @@ pub async fn probe(
     // error on the first send. The CAPT-6 fix paid a fresh connection per
     // probe to avoid ever touching the pool; the target-state fix keeps
     // the warm session and retries ONCE on a FRESH client when the pooled
-    // send fails — a healthy endpoint with a stale pool cannot accumulate
+    // send fails - a healthy endpoint with a stale pool cannot accumulate
     // consecutive failures, and only the successful attempt's RTT is
     // sampled (a stale-RST costs zero in `latency_avg_1m_ms`).
     let mut attempt = 0u32;
@@ -212,7 +212,7 @@ pub async fn probe(
                 } else {
                     (None, None)
                 };
-                // Drain gauge (captain README §7): capture the optional `active_connections` —
+                // Drain gauge (captain README §7): capture the optional `active_connections` -
                 // None when absent (non-gauge service) so the drain falls back to
                 // the fixed window instead of treating a missing key as zero.
                 let active_connections = if ok {
@@ -244,14 +244,14 @@ pub async fn probe(
                 attempt = 1;
                 // Debug-level: probe failures feed the kill branch (3 consecutive →
                 // SIGKILL); a misdiagnosed failure is invisible without the error
-                // string. Warn only for repeated failures would hide the pattern —
+                // string. Warn only for repeated failures would hide the pattern -
                 // debug keeps the firehose quiet while carrying the failure mode.
                 tracing::debug!(
                     port = local_port,
                     url = %url,
                     error = %probe_err,
                     attempt = 1,
-                    "health probe transport error — retrying once on a fresh connection (CAPT-7)"
+                    "health probe transport error - retrying once on a fresh connection (CAPT-7)"
                 );
             }
             Err(probe_err) => {

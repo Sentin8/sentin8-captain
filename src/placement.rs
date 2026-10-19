@@ -3,14 +3,14 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
 // SPDX-License-Identifier: Apache-2.0
 
-//! Placement decision seams — the ONE gate every spawn site consults
+//! Placement decision seams - the ONE gate every spawn site consults
 //! (DESIGN.md §11.3).
 //!
 //! Placement is declarative catalog data (`pin:{ip}` / `anti:{service}` /
 //! `singleton`), and enforcement is structural: boot spawn,
 //! `POST /v1/captain/start-services`, the scaler's scale-up, and the
 //! remote-spawn path (§11.4) all call [`placement_admits`] before spawning.
-//! There is no spawn path that bypasses the gate — a violation is refused
+//! There is no spawn path that bypasses the gate - a violation is refused
 //! with a structured reason, never a silent wrong-machine spawn.
 //!
 //! All seams are pure functions over (entry, local_ip, observed instances)
@@ -63,13 +63,13 @@ impl PlacementRefusal {
     }
 }
 
-/// The env lookup behind `pin:edge` resolution — an injection seam so
+/// The env lookup behind `pin:edge` resolution - an injection seam so
 /// unit tests can pin the value WITHOUT mutating process-global env
 /// (parallel unit tests would otherwise race on `std::env::set_var`).
 /// Production callers pass [`edge_ip_from_env`].
 pub type EdgeIpResolver<'a> = &'a dyn Fn() -> Option<String>;
 
-/// The production `pin:edge` resolver — `SENTIN8_CAPTAIN_EDGE_IP` from the
+/// The production `pin:edge` resolver - `SENTIN8_CAPTAIN_EDGE_IP` from the
 /// operator env (the operator sets it ONLY on the edge host).
 pub fn edge_ip_from_env() -> Option<String> {
     std::env::var("SENTIN8_CAPTAIN_EDGE_IP")
@@ -89,7 +89,7 @@ pub fn resolve_pin(pin: &str, resolve_edge: EdgeIpResolver<'_>) -> Option<String
     }
 }
 
-/// One observed instance row — the registry snapshot callers pass in
+/// One observed instance row - the registry snapshot callers pass in
 /// (already filtered to relevant statuses by the caller).
 #[derive(Debug, Clone)]
 pub struct ObservedInstance {
@@ -102,12 +102,12 @@ pub struct ObservedInstance {
 /// Does `entry` admit a spawn of its service on THIS machine?
 ///
 /// `local_ip` is this machine; `local_instances` are the instances observed
-/// on this machine (any non-terminal status — the anti-affinity check must
+/// on this machine (any non-terminal status - the anti-affinity check must
 /// see `Starting` rows too, or a tier-parallel spawn would co-locate); the
 /// caller passes ALL fleet instances so the `singleton` check is global.
 ///
 /// Unconstrained entries admit. Malformed placement keys fail safe to
-/// unconstrained (the parse contract — see `parse_placement`).
+/// unconstrained (the parse contract - see `parse_placement`).
 pub fn placement_admits(
     entry: &ServiceCatalogEntry,
     local_ip: &str,
@@ -127,10 +127,10 @@ pub fn placement_admits(
 }
 
 /// The shared decision body behind [`placement_admits`] (and the test
-/// seam): `pin:edge` unset resolves by fleet size — with ONE machine (or
+/// seam): `pin:edge` unset resolves by fleet size - with ONE machine (or
 /// an empty registry, first boot) that machine self-elects as the edge
 /// (DESIGN §11.3 single-machine dev); with a multi-machine fleet the
-/// unset refusal stands (the operator must pin the edge — fail-safe,
+/// unset refusal stands (the operator must pin the edge - fail-safe,
 /// never a wrong-machine :443).
 fn placement_admits_inner(
     entry: &ServiceCatalogEntry,
@@ -141,7 +141,7 @@ fn placement_admits_inner(
 ) -> Result<(), PlacementRefusal> {
     if let Some((crate::catalog::PlacementKind::Pin, pin)) = entry.parse_placement() {
         // "Single-machine fleet" honestly = every observed instance lives
-        // on THIS machine (or the registry is empty — first boot). Counting
+        // on THIS machine (or the registry is empty - first boot). Counting
         // instances would misread one remote instance as a single-machine
         // fleet; counting machines needs distinct IPs.
         if pin == "edge"
@@ -150,9 +150,9 @@ fn placement_admits_inner(
         {
             tracing::info!(
                 local_ip,
-                "pin:edge unset + single-machine fleet — this machine self-elects as the edge"
+                "pin:edge unset + single-machine fleet - this machine self-elects as the edge"
             );
-            // Self-elected: this machine IS the edge — admit without a
+            // Self-elected: this machine IS the edge - admit without a
             // pin comparison.
         } else if let Some(pinned_to) = resolve_pin(&pin, resolve_edge) {
             if pinned_to != local_ip {
@@ -180,7 +180,7 @@ fn placement_admits_inner(
     Ok(())
 }
 
-/// The injection-seam variant of [`placement_admits`] — unit tests pin the
+/// The injection-seam variant of [`placement_admits`] - unit tests pin the
 /// `pin:edge` resolution without mutating process-global env (parallel
 /// tests would otherwise race on `std::env::set_var`).
 #[cfg(test)]
@@ -253,7 +253,7 @@ mod tests {
     #[test]
     fn pin_edge_resolves_via_env() {
         let e = entry("pin:edge", false);
-        // Edge resolves to the configured machine (injection seam — no
+        // Edge resolves to the configured machine (injection seam - no
         // process-global env mutation; parallel tests stay deterministic).
         let edge_at = || Some("10.0.0.7".to_string());
         assert_eq!(
@@ -284,7 +284,7 @@ mod tests {
         // stands (operator must pin the edge).
         let other = inst("10.0.0.9", "test:other");
         assert!(placement_admits_with(&e, ME, &[], &[other], &unconfigured).is_err());
-        // Explicit edge elsewhere (+ single machine? no — fleet has another
+        // Explicit edge elsewhere (+ single machine? no - fleet has another
         // machine by definition of an edge on it) → mismatch refuses on ME.
         let configured = || Some("10.0.0.5".into());
         assert!(placement_admits_with(&e, ME, &[], &[], &configured).is_err());
@@ -303,7 +303,7 @@ mod tests {
         // The anti target on ANOTHER machine → admit (anti-affinity is
         // per-machine co-location, not fleet exclusion).
         assert!(placement_admits(&e, ME, &[], &[inst("10.0.0.2", "test:db")]).is_ok());
-        // A Starting sibling counts — tier-parallel spawns must not co-locate.
+        // A Starting sibling counts - tier-parallel spawns must not co-locate.
         assert!(placement_admits(&e, ME, &[inst(ME, "test:db")], &[]).is_err());
     }
 
@@ -316,7 +316,7 @@ mod tests {
             placement_admits(&e, ME, &[], &[inst("10.0.0.2", "test:svc")]),
             Err(PlacementRefusal::SingletonViolation)
         );
-        // Twin on this machine → refuse (the local start path too) —
+        // Twin on this machine → refuse (the local start path too) -
         // the fleet list must see LOCAL twins as well, or a same-machine
         // second spawn would slip past.
         assert_eq!(

@@ -3,26 +3,26 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
 // SPDX-License-Identifier: Apache-2.0
 
-//! Local control channel — Unix domain socket listener.
+//! Local control channel - Unix domain socket listener.
 //!
 //! Captain additionally serves its management API over
 //! `{run_dir}/captain.sock` so local operators can control the platform
-//! with kernel-proven credentials instead of a Sentin8:Auth token — the
+//! with kernel-proven credentials instead of a Sentin8:Auth token - the
 //! `systemctl` model for `make start/stop/status`. Authorization on this
 //! transport is `SO_PEERCRED`: the connecting process's effective uid must
 //! be `0` (root) or the socket file's owner (the user that started
-//! captain). Everyone else — including other local users — gets 401 on
+//! captain). Everyone else - including other local users - gets 401 on
 //! every endpoint, probes included: an untrusted local peer has no
 //! business even reading captain's health.
 //!
-//! The TCP listener keeps the full Shield gate untouched — the LAN
+//! The TCP listener keeps the full Shield gate untouched - the LAN
 //! RCE surface (`merge-catalog` / `start-services` spawning attacker-chosen
 //! binaries) is not affected: the UDS is a local-only, `0600`-permissioned
 //! file reachable from no other host.
 //!
 //! Transport of the authorization decision: the accept loop strips any
-//! client-supplied `x-sentin8-local-peer-uid` header, then — only for
-//! kernel-authorized peers — injects its own value. The TCP router strips
+//! client-supplied `x-sentin8-local-peer-uid` header, then - only for
+//! kernel-authorized peers - injects its own value. The TCP router strips
 //! the header unconditionally (anti-spoofing middleware in `server.rs`).
 //! `handlers::require_captain_policy` treats a present header as
 //! kernel-verified peer identity. This mirrors the platform-wide
@@ -31,7 +31,7 @@
 
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
-// Router::call comes from the Service trait — must be in scope.
+// Router::call comes from the Service trait - must be in scope.
 use tower::Service as _;
 
 /// Header carrying the kernel-proven peer uid on local-socket requests.
@@ -49,11 +49,11 @@ pub fn uid_authorized(uid: u32, socket_owner: Option<u32>) -> bool {
 }
 
 /// Bind the local control socket, returning the listener plus the socket
-/// file's owner uid (captured at bind time — the account running captain).
+/// file's owner uid (captured at bind time - the account running captain).
 ///
 /// A stale socket file from a previous captain run is unlinked first; the
 /// file gets `0600` permissions so only root (which bypasses file perms)
-/// and the owning user can even reach it — defense-in-depth on top of
+/// and the owning user can even reach it - defense-in-depth on top of
 /// `SO_PEERCRED`.
 ///
 /// Returns `Ok(None)` on non-Unix platforms (no UDS control channel
@@ -65,7 +65,7 @@ pub fn bind_local_socket() -> anyhow::Result<Option<(tokio::net::UnixListener, O
         if let Some(parent) = std::path::Path::new(&path).parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        // Stale socket from a previous run — unlink before rebinding. A
+        // Stale socket from a previous run - unlink before rebinding. A
         // live captain is the only process that binds this path (advisory
         // lock exclusivity), so the file cannot belong to a running peer.
         if std::path::Path::new(&path).exists() {
@@ -86,7 +86,7 @@ pub fn bind_local_socket() -> anyhow::Result<Option<(tokio::net::UnixListener, O
     }
 }
 
-/// The uid that owns the socket file — the account that started captain.
+/// The uid that owns the socket file - the account that started captain.
 #[cfg(unix)]
 fn socket_owner_uid(path: &str) -> Option<u32> {
     use std::os::unix::fs::MetadataExt as _;
@@ -108,7 +108,7 @@ pub fn remove_local_socket() {
 }
 
 /// Strip middleware for the TCP listener: the local-peer header must never
-/// arrive over the network — a client-supplied copy is removed before any
+/// arrive over the network - a client-supplied copy is removed before any
 /// handler (or the Shield gate) sees it.
 pub async fn strip_local_peer_header(
     mut req: axum::extract::Request,
@@ -153,7 +153,7 @@ pub async fn serve_local(
                 let mut app = app.clone();
                 async move {
                     // Strip any client-supplied copy, then inject the
-                    // kernel-proven value — the only source of truth for
+                    // kernel-proven value - the only source of truth for
                     // this header on the UDS transport.
                     req.headers_mut().remove(LOCAL_PEER_HEADER);
                     if let Ok(v) = axum::http::HeaderValue::from_str(&uid.to_string()) {

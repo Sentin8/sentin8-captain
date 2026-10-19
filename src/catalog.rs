@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
 // SPDX-License-Identifier: Apache-2.0
 
-//! Static service catalog — the *desired* definition of how to spawn each
+//! Static service catalog - the *desired* definition of how to spawn each
 //! service type. The live registry is `orch_services` (see `store.rs`);
 //! the catalog is the bootstrap source.
 
@@ -30,7 +30,7 @@ pub struct ServiceCatalogEntry {
     #[serde(default)]
     /// The binary path.
     pub binary_path: String,
-    /// Startup ordering tier — lower starts first. Captain spawns services
+    /// Startup ordering tier - lower starts first. Captain spawns services
     /// tier-by-tier with a 3-second pause between tiers and bounded
     /// concurrency within a tier.
     #[serde(default = "default_start_priority")]
@@ -44,7 +44,7 @@ pub struct ServiceCatalogEntry {
     pub fixed_port: u16,
     /// Health-check port offset. When 0, the service's `local_port` is
     /// used for the health probe. When non-zero (e.g. 10000), the health
-    /// probe targets `local_port + health_port` — this is how services
+    /// probe targets `local_port + health_port` - this is how services
     /// with a separate management port (proxy, tls) are probed. The same
     /// offset is used to set `*_MGMT_PORT` env var when spawning.
     #[serde(default)]
@@ -59,7 +59,7 @@ pub struct ServiceCatalogEntry {
     /// When true, `upgrade` stops the old instance BEFORE spawning the
     /// replacement (stop-first) instead of the rolling spawn-new→drain
     /// flow. Required for services whose process owns fixed secondary
-    /// ports (e.g. an email MTA holding SMTP 25 or IMAP 143) — a
+    /// ports (e.g. an email MTA holding SMTP 25 or IMAP 143) - a
     /// rolling swap would collide on those ports while the old process
     /// is still draining.
     #[serde(default)]
@@ -75,7 +75,7 @@ pub struct ServiceCatalogEntry {
     /// Database-DSN environment-variable NAMES this service consumes
     /// (VDC §VDC.3, registry-driven propagation). Captain propagates the
     /// operator-set values of exactly these names from its own environment
-    /// to the spawned process — values are never sourced from the catalog
+    /// to the spawned process - values are never sourced from the catalog
     /// (secrets stay in the operator's env). Example for a vertical
     /// service: `["BANK8_LEDGER_DATABASE_URL", "BANK8_TLS_DATABASE_URL"]`.
     /// Platform `SENTIN8_*_DATABASE_URL` names are propagated
@@ -96,16 +96,16 @@ pub struct ServiceCatalogEntry {
     /// instance of this service onto exactly one machine; `anti:{other}`
     /// forbids co-locating this service with the named service type on the
     /// same machine (the spawn path refuses and the scaler skips). Both are
-    /// declarative catalog data — never runtime code. `pin:edge` is the
+    /// declarative catalog data - never runtime code. `pin:edge` is the
     /// operator-resolved pseudo-IP (`SENTIN8_CAPTAIN_EDGE_IP`, §11.3).
     #[serde(default)]
     /// The placement constraint.
     pub placement: String,
     /// Fleet singleton (DESIGN.md §11.3): at most ONE live instance of
-    /// this service type anywhere in the fleet — the placement gate
+    /// this service type anywhere in the fleet - the placement gate
     /// refuses any spawn (boot, start-services, scaler, remote spawn)
     /// when an Active instance exists on any machine. Used by services
-    /// whose plane must not fork (acme — the CA; proxy — the ingress).
+    /// whose plane must not fork (acme - the CA; proxy - the ingress).
     #[serde(default)]
     /// The singleton placement flag.
     pub singleton: bool,
@@ -125,7 +125,7 @@ impl ServiceCatalogEntry {
         }
         if let Some(ip) = raw.strip_prefix("pin:") {
             // A real machine IP (four dotted quads) OR the operator-resolved
-            // `edge` pseudo-IP (DESIGN §11.3 — placement::resolve_pin maps
+            // `edge` pseudo-IP (DESIGN §11.3 - placement::resolve_pin maps
             // it via SENTIN8_CAPTAIN_EDGE_IP at spawn time).
             if (ip.split('.').count() == 4 && !ip.is_empty()) || ip == "edge" {
                 return Some((PlacementKind::Pin, ip.to_string()));
@@ -173,7 +173,7 @@ pub const MIN_INSTANCES: u8 = 1;
 /// The max instances constant.
 pub const MAX_INSTANCES: u8 = 1;
 
-// ── Scaling thresholds (all "never scale" — auto-scaling is disabled) ───
+// ── Scaling thresholds (all "never scale" - auto-scaling is disabled) ───
 /// The busy cpu pct constant.
 pub const BUSY_CPU_PCT: f32 = 100.0;
 /// The busy latency ms constant.
@@ -196,7 +196,7 @@ pub const IDLE_WINDOW_S: u64 = 999999999;
 // defaults are deliberately LOWER than the never-scale machine caps above:
 // the scaler never fires with its pins, so `MACHINE_*_CAP` never
 // saturates in practice. The provisioner needs a workable saturation
-// threshold to be testable — like , provisioning is disabled by
+// threshold to be testable - like , provisioning is disabled by
 // default (PROVISION_PROFILE defaults to Never), so re-enabling is a
 // deliberate, reviewed change.
 
@@ -213,7 +213,7 @@ pub const PROVISION_MEM_CAP_PCT: f32 = 95.0;
 /// a transient spike must not trigger provisioning.
 /// The provision window s constant.
 pub const PROVISION_WINDOW_S: u64 = 60;
-/// Cooldown (seconds) between machine provisions — at most one machine
+/// Cooldown (seconds) between machine provisions - at most one machine
 /// per window, mirroring the one-instance-per-tick storm guard.
 /// The provision cooldown s constant.
 pub const PROVISION_COOLDOWN_S: u64 = 300;
@@ -253,7 +253,7 @@ impl ServiceCatalogEntry {
     /// Spawn command.
     pub fn spawn_command(&self, local_port: u16) -> tokio::process::Command {
         // Flutter web apps: spawn the Rust static-server binary, which
-        // terminates TLS via sentin8-tls and serves the web build — so proxy
+        // terminates TLS via sentin8-tls and serves the web build - so proxy
         // can pipe raw TLS to it like any Rust service (no L7 proxying).
         // Detected by non-empty web_root (replaces the old is_app flag).
         if !self.web_root.is_empty() {
@@ -277,7 +277,7 @@ impl ServiceCatalogEntry {
         }
 
         // If this entry has a resolved binary_path (set by add-catalog),
-        // use it directly — no need to search the global prefix.
+        // use it directly - no need to search the global prefix.
         if !self.binary_path.is_empty() {
             let c = tokio::process::Command::new(&self.binary_path);
             // Fall through to env/args setup below.
@@ -315,7 +315,7 @@ impl ServiceCatalogEntry {
             for key in [
                 "SENTIN8_DOMAIN",
                 "DATABASE_URL",
-                // Per-service DSNs (DBX-CLI-6) — see the other spawn branch.
+                // Per-service DSNs (DBX-CLI-6) - see the other spawn branch.
                 "SENTIN8_AUTH_DATABASE_URL",
                 "SENTIN8_SYS_DATABASE_URL",
                 "SENTIN8_BUS_DATABASE_URL",
@@ -333,11 +333,11 @@ impl ServiceCatalogEntry {
                 "SENTIN8_BFF_DATABASE_URL",
                 "VALKEY_URL",
                 // VALKEYDERIVE-1 (group DESIGN.md §3.1): propagate the
-                // plane's COORDINATES — services derive their Valkey URLs
+                // plane's COORDINATES - services derive their Valkey URLs
                 // (valkeys://{host}:{port}/0) or honor an explicit per-service
                 // override from database_env_vars/extra_env. The historical
                 // per-service VALKEY_URL propagation retired with the
-                // logical-DB convention (the /N suffix was inert — GLIDE
+                // logical-DB convention (the /N suffix was inert - GLIDE
                 // connects at DB 0; ACL namespaces isolate).
                 "SENTIN8_VALKEY_HOST",
                 "SENTIN8_VALKEY_PORT",
@@ -345,7 +345,7 @@ impl ServiceCatalogEntry {
                 "SENTIN8_AUTH_JWKS_URL",
                 "SENTIN8_BUS_URL",
                 // Certificate-bound M2M identity (auth design target
-                // state). ONLY the public Root-CA PEM travels — NEVER
+                // state). ONLY the public Root-CA PEM travels - NEVER
                 // SENTIN8_ACME_DATA_DIR / _BASE_URL: the Acme data dir holds
                 // the Root/Intermediate CA PRIVATE keys, and putting the dir
                 // path into every service's env would let any compromised
@@ -359,7 +359,7 @@ impl ServiceCatalogEntry {
                 "SENTIN8_AUTH_UI_DIR",
                 // TLS-RLS-4: the platform-plane label map for the
                 // database-free hostname resolver (static platform
-                // hostnames — see crates/tls context.rs). Propagated from
+                // hostnames - see crates/tls context.rs). Propagated from
                 // the operator/captain environment; nothing
                 // vertical-specific is hardcoded in the platform.
                 "SENTIN8_TLS_PLATFORM_LABELS",
@@ -377,7 +377,7 @@ impl ServiceCatalogEntry {
             }
             // Bootstrap enrollment credential ( target state): the
             // captain-brokered, time-boxed, encrypted-at-rest secret that
-            // closes the first-boot chicken-and-egg — a workload with no
+            // closes the first-boot chicken-and-egg - a workload with no
             // cert and no token cannot self-authenticate to acme, so acme
             // admits enrollment mints presenting the SAME secret captain
             // shared with it (verified locally, no auth round-trip).
@@ -385,7 +385,7 @@ impl ServiceCatalogEntry {
                 cmd.env(crate::bootstrap::ENV_ENROLLMENT, &secret);
                 cmd.env(crate::bootstrap::ENV_ENROLLMENT_TS, ts.to_string());
                 // The captain's OWN policy/bus DCR loops also ride the
-                // enrollment channel — seed this process's env too (idempotent
+                // enrollment channel - seed this process's env too (idempotent
                 // first-write; refreshes the TS copy when captain re-stamps).
                 if std::env::var(crate::bootstrap::ENV_ENROLLMENT)
                     .map(|v| v.is_empty())
@@ -396,7 +396,7 @@ impl ServiceCatalogEntry {
                     std::env::set_var(crate::bootstrap::ENV_ENROLLMENT_TS, ts.to_string());
                 }
             }
-            // Log redirect — FHS: /var/log/sentin8 (dev: .run/logs).
+            // Log redirect - FHS: /var/log/sentin8 (dev: .run/logs).
             let log_dir = sentin8::config::log_dir();
             let stdout_path =
                 std::path::Path::new(&log_dir).join(format!("{}.log", self.service_type));
@@ -447,7 +447,7 @@ impl ServiceCatalogEntry {
             c
         };
         // Set the service port env var (e.g. SENTIN8_AUTH_PORT=3124). Workers
-        // get a *_W_PORT env var (e.g. BANK8_PAYMENTS_W_PORT=8024) — the
+        // get a *_W_PORT env var (e.g. BANK8_PAYMENTS_W_PORT=8024) - the
         // worker binary reads this to bind its /v1/health endpoint.
         //
         // The env var name is derived from the service_type (colon identity,
@@ -472,11 +472,11 @@ impl ServiceCatalogEntry {
         }
         // Catalog-declared extra env (raw-protocol listener ports,
         // feature flags). Catalog values never override platform env.
-        // Applied on BOTH branches — vertical services registered via the
+        // Applied on BOTH branches - vertical services registered via the
         // prefix search (no per-entry binary_path) must receive them too.
         for (k, v) in &self.extra_env {
             cmd.env(k, v);
-        } // VDC §VDC.3: catalog-declared database-DSN env-var names — same
+        } // VDC §VDC.3: catalog-declared database-DSN env-var names - same
           // propagation as the binary_path branch (see the comment there).
         for key in &self.database_env_vars {
             if let Ok(val) = std::env::var(key) {
@@ -515,7 +515,7 @@ impl ServiceCatalogEntry {
             "SENTIN8_BFF_DATABASE_URL",
             "VALKEY_URL",
             // VALKEYDERIVE-1: plane coordinates (see the binary_path
-            // branch comment) — the per-service Valkey URL propagation
+            // branch comment) - the per-service Valkey URL propagation
             // retired with the inert logical-DB convention.
             "SENTIN8_VALKEY_HOST",
             "SENTIN8_VALKEY_PORT",
@@ -527,19 +527,19 @@ impl ServiceCatalogEntry {
             // auth on the service's own TLS listener
             // (`SENTIN8_TLS_CLIENT_CA_PEM`), CA-trusts the outbound
             // DCR/token channel AND the PostgreSQL certificate-identity
-            // plane (`SENTIN8_TLS_CA_PEM`, group DESIGN.md §3.2 — the
+            // plane (`SENTIN8_TLS_CA_PEM`, group DESIGN.md §3.2 - the
             // pg_pool factory resolves the same chain file). ONLY the
-            // public cert path propagates — NEVER SENTIN8_ACME_DATA_DIR /
+            // public cert path propagates - NEVER SENTIN8_ACME_DATA_DIR /
             // _BASE_URL (the Acme data dir holds the CA PRIVATE keys; see
             // the rationale on the other spawn branch).
             "SENTIN8_TLS_CLIENT_CA_PEM",
             "SENTIN8_TLS_CA_PEM",
-            // Peer service ports — auto-assigned by captain and propagated to
+            // Peer service ports - auto-assigned by captain and propagated to
             // children so cross-service callers (e.g. sentin8-tls → acme)
             // know where to reach them without hardcoded port literals.
             // children so cross-service callers (e.g. sentin8-tls → acme)
             // know where to reach them without hardcoded port literals.
-            // NOTE: SENTIN8_ACME_PORT is intentionally NOT propagated here — it
+            // NOTE: SENTIN8_ACME_PORT is intentionally NOT propagated here - it
             // is set per-instance above via `port_env` (e.g. SENTIN8_ACME_PORT=8023
             // during a rolling upgrade). Propagating the parent's SENTIN8_ACME_PORT
             // would overwrite the per-instance port and cause the new
@@ -548,17 +548,17 @@ impl ServiceCatalogEntry {
             // not from this env var.
             // Base port so children can derive the full port layout.
             "SENTIN8_BASE_PORT",
-            // Local IP — propagated so ACME can include it in its bootstrap
+            // Local IP - propagated so ACME can include it in its bootstrap
             // cert SAN list (clients connect via IP from ServiceDiscovery).
             "SENTIN8_CAPTAIN_LOCAL_IP",
             // Auth hosted UI directory (built Flutter web app).
             "SENTIN8_AUTH_UI_DIR",
-            // Local secret-reference store root ( — secret
+            // Local secret-reference store root ( - secret
             // references only). Services resolve `sentin8-secrets://` URIs
             // against this dir (e.g. fdx provider tokens); without it they
             // default to /etc/sentin8/secrets which is unwritable in dev.
             "SENTIN8_SECRETS_DIR",
-            // M2M DCR file-cache root (/ — the authoritative
+            // M2M DCR file-cache root (/ - the authoritative
             // DCR credential load path). Without a writable cache every boot
             // re-runs the full DCR dance ( cold-boot
             // storms + retry-window exhaustion). The CLI sets it from
@@ -570,7 +570,7 @@ impl ServiceCatalogEntry {
             }
         }
 
-        // Bootstrap enrollment credential ( target state) — see the
+        // Bootstrap enrollment credential ( target state) - see the
         // full rationale on the binary_path spawn branch above.
         if let Ok((secret, ts)) = crate::bootstrap::ensure_enrollment() {
             cmd.env(crate::bootstrap::ENV_ENROLLMENT, &secret);
@@ -609,7 +609,7 @@ impl ServiceCatalogEntry {
 
         // Put the child in its own process group so that killing captain
         // (SIGTERM/SIGKILL) does NOT propagate to managed services. Each
-        // service survives independently — captain re-adopts them on
+        // service survives independently - captain re-adopts them on
         // restart by scanning Valkey for existing PIDs.
         #[cfg(unix)]
         cmd.process_group(0);

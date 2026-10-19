@@ -3,13 +3,13 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
 // SPDX-License-Identifier: Apache-2.0
 
-//! Machine auto-provisioning — the cluster-autoscaler role.
+//! Machine auto-provisioning - the cluster-autoscaler role.
 //!
 //! A narrow, deliberate exception to the "one captain per machine, no leader
 //! election" principle: exactly ONE captain instance fleet-wide holds the
 //! provisioning role, elected via a Valkey advisory lock. The election governs
-//! ONLY the provisioning decision loop — process supervision stays per-machine
-//! and election-free (–).
+//! ONLY the provisioning decision loop - process supervision stays per-machine
+//! and election-free (-).
 //!
 //! Scaling axes:
 //! - Vertical (in-machine): the scaler adds instances up to
@@ -23,9 +23,9 @@
 //! annotates that entry with `saturated = true` when the host crosses the
 //! saturation thresholds (PROVISION-1); this module reads the annotation.
 //!
-//! Environment profile : `never` (default — disabled) / `auto`
+//! Environment profile : `never` (default - disabled) / `auto`
 //! (provision up to `MAX_MACHINES` with cooldown + scale-in). There is NO
-//! `manual` profile — dry-run is `auto` + the `noop` backend.
+//! `manual` profile - dry-run is `auto` + the `noop` backend.
 //!
 //! Backends : pluggable behind [`Provisioner`]. Only `noop` is
 //! implemented; it records the decision and alerts without provisioning.
@@ -64,7 +64,7 @@ pub const PENDING_KEY: &str = "captain:provision:pending";
 // ── Environment profile ────────────────────────────────
 
 /// Machine auto-provisioning profile. The default is `Auto` (with the
-/// default `noop` backend, that is a dry-run — decisions are recorded, no
+/// default `noop` backend, that is a dry-run - decisions are recorded, no
 /// machine is ever created). `Never` disables the role entirely; `Manual`
 /// requires operator approval before the backend executes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -88,7 +88,7 @@ pub enum ProvisionProfile {
 impl ProvisionProfile {
     /// Parse the `SENTIN8_CAPTAIN_PROVISION_PROFILE` value. Unset → `Auto`
     /// (the operational default); an unrecognized value fails safe to
-    /// `Never` — re-enabling/disabling is a deliberate, reviewed change.
+    /// `Never` - re-enabling/disabling is a deliberate, reviewed change.
     /// Parse it.
     pub fn parse(s: Option<&str>) -> Self {
         match s.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
@@ -161,7 +161,7 @@ impl MachineSample {
     }
 }
 
-// ── Pure decision seams (TEST-8 pattern — mirror TEST-2) ────────────────
+// ── Pure decision seams (TEST-8 pattern - mirror TEST-2) ────────────────
 
 /// Saturation decision seam: host CPU/mem at or above the saturation caps.
 /// Handle is saturated.
@@ -177,7 +177,7 @@ pub fn is_idle_host(cpu_pct: f32, mem_pct: f32) -> bool {
         && mem_pct < crate::catalog::PROVISION_IDLE_MEM_PCT
 }
 
-/// Cooldown decision seam — pure so TEST-8 can pin the storm guard.
+/// Cooldown decision seam - pure so TEST-8 can pin the storm guard.
 /// `since_last` = seconds elapsed since the last provision; provisioning is
 /// allowed only when the cooldown has fully elapsed.
 /// Handle provision cooldown elapsed.
@@ -189,7 +189,7 @@ pub fn provision_cooldown_elapsed(since_last_s: Option<u64>, cooldown_s: u64) ->
 }
 
 /// Scale-in target seam: pick the most-recently-provisioned idle machine
-/// (LIFO — the base machine is never retired). `provision_order` is the
+/// (LIFO - the base machine is never retired). `provision_order` is the
 /// machines in provision order (oldest first, from `PROVISION_ORDER_KEY`);
 /// the LAST idle candidate is retired first. Returns `None` when no machine
 /// is idle.
@@ -292,7 +292,7 @@ pub enum ProvisionOutcome {
 /// binaries installed plus a bootstrap command that starts captain on it
 /// pointed at the shared Valkey registry. The moment the new machine's
 /// captain registers its services, Sentin8:Proxy picks them up automatically
-/// — no proxy change.
+/// - no proxy change.
 #[async_trait::async_trait]
 pub trait Provisioner: Send + Sync {
     /// The backend's short name.
@@ -307,7 +307,7 @@ pub trait Provisioner: Send + Sync {
     async fn deprovision(&self, ip: &str) -> Result<(), anyhow::Error>;
 }
 
-/// The `noop` backend — dry-run.
+/// The `noop` backend - dry-run.
 ///
 /// Records what *would* be provisioned and emits a Post alert, without
 /// provisioning anything. Flipping `SENTIN8_CAPTAIN_PROVISION_BACKEND` from
@@ -343,7 +343,7 @@ impl Provisioner for NoopProvisioner {
             busy_service = %req.busy_service,
             profile = "auto",
             "captain.provision.dry_run: machine saturated and in-machine scaling \
-             exhausted — would provision a new machine (backend=noop, no action)"
+             exhausted - would provision a new machine (backend=noop, no action)"
         );
         Ok(ProvisionOutcome::DryRun {
             bootstrap_cmd: bootstrap_command("UNPROVISIONED", config),
@@ -353,7 +353,7 @@ impl Provisioner for NoopProvisioner {
     async fn deprovision(&self, ip: &str) -> Result<(), anyhow::Error> {
         tracing::warn!(
             ip,
-            "captain.deprovision.dry_run: machine idle beyond window — would \
+            "captain.deprovision.dry_run: machine idle beyond window - would \
              deprovision (backend=noop, no action)"
         );
         Ok(())
@@ -375,7 +375,7 @@ pub fn resolve_provisioner(name: &str) -> Box<dyn Provisioner> {
         other => {
             tracing::warn!(
                 backend = other,
-                "unknown provision backend — falling back to noop"
+                "unknown provision backend - falling back to noop"
             );
             Box::new(NoopProvisioner)
         }
@@ -384,43 +384,43 @@ pub fn resolve_provisioner(name: &str) -> Box<dyn Provisioner> {
 
 // ── OpenTofu backend ─────────────────────
 
-/// The OpenTofu backend — one `tofu` pipeline for ALL FOUR environments
+/// The OpenTofu backend - one `tofu` pipeline for ALL FOUR environments
 /// (`cloud` / `hypervisor` / `bare-metal` / `docker`).
 ///
-/// Layout (all env vars, nothing hardcoded — consistent with the platform's
+/// Layout (all env vars, nothing hardcoded - consistent with the platform's
 /// runtime-derivation discipline):
 ///
-/// - `SENTIN8_CAPTAIN_TOFU_DIR` — working dir holding the OpenTofu
+/// - `SENTIN8_CAPTAIN_TOFU_DIR` - working dir holding the OpenTofu
 ///   configuration (default `<state_dir/captain>/tofu`). The operator
 ///   supplies the `.tf` files (module per backend, variables below).
-/// - `SENTIN8_CAPTAIN_TOFU_BIN` — binary name (default `tofu`).
+/// - `SENTIN8_CAPTAIN_TOFU_BIN` - binary name (default `tofu`).
 ///
 /// Per-apply variables (passed as `-var`, never written to disk):
 /// - `backend` = `cloud` | `hypervisor` | `bare-metal` | `docker`
 /// - `action` = `provision` | `deprovision`
-/// - `trigger_ip`, `busy_service`, `target_ip` — from the request
-/// - `valkey_url`, `catalog_paths` — the bootstrap contract
+/// - `trigger_ip`, `busy_service`, `target_ip` - from the request
+/// - `valkey_url`, `catalog_paths` - the bootstrap contract
 ///
 /// The operator's `.tf` maps these onto the real provider (AWS/Azure/GCP,
 /// Proxmox/vSphere, MAAS/Tinkerbell/IPMI, `kreuzwerker/docker`).
 ///
-/// **Bootstrap contract — the module owns the full machine bring-up:**
+/// **Bootstrap contract - the module owns the full machine bring-up:**
 /// install the sentin8 `.deb` (golden image / cloud-init / container
-/// entrypoint — packaging design) and start captain connected to the
+/// entrypoint - packaging design) and start captain connected to the
 /// shared Valkey registry (the variables carry the contract to the
 /// module). Rust never SSHes. After `apply`, the module MUST expose
 /// `output "new_ip"` with the new machine's (or container's) IP; for
 /// `deprovision` it destroys the target's resource.
 ///
 /// **Container-fleet caveat (`docker`)**: `/proc/stat` and `/proc/meminfo`
-/// are NOT namespaced — every container's `captain:host:{ip}` reports
+/// are NOT namespaced - every container's `captain:host:{ip}` reports
 /// host-level CPU/mem, so all sibling containers saturate simultaneously.
 /// The cooldown + one-machine-per-window guard is what prevents a burst;
 /// plan capacity accordingly (macvlan network is required so each
 /// container gets its own LAN IP for the Valkey registry model).
 ///
 /// Credentials are the provider's own env vars (AWS_ACCESS_KEY_ID,
-/// PROXMOX_VE_API_TOKEN, …) — never stored by Sentin8 (secrets-by-reference).
+/// PROXMOX_VE_API_TOKEN, …) - never stored by Sentin8 (secrets-by-reference).
 /// The tofuprovisioner type.
 pub struct TofuProvisioner {
     backend: String,
@@ -458,7 +458,7 @@ impl TofuProvisioner {
                 .unwrap_or(true)
         {
             anyhow::bail!(
-                "OpenTofu module dir {dir} is empty — supply the .tf module for backend '{}'",
+                "OpenTofu module dir {dir} is empty - supply the .tf module for backend '{}'",
                 self.backend
             );
         }
@@ -506,7 +506,7 @@ impl TofuProvisioner {
         }
         let ip = String::from_utf8_lossy(&outp.stdout).trim().to_string();
         if ip.is_empty() {
-            anyhow::bail!("tofu output new_ip is empty — module must expose `output \"new_ip\"`");
+            anyhow::bail!("tofu output new_ip is empty - module must expose `output \"new_ip\"`");
         }
         Ok(ip)
     }
@@ -536,7 +536,7 @@ impl Provisioner for TofuProvisioner {
             busy_service = %req.busy_service,
             "tofu: applying provision (OpenTofu)"
         );
-        // FLEET-3 (DESIGN §11.5): the operator env contract — the module
+        // FLEET-3 (DESIGN §11.5): the operator env contract - the module
         // materializes `sentin8_env_file`'s content as the machine's
         // /etc/sentin8/sentin8.env (the systemd unit sources it). The
         // content travels as a file var (sensitive), never logged; the
@@ -562,7 +562,7 @@ impl Provisioner for TofuProvisioner {
         }
         let new_ip = match self.run_apply("provision", &vars).await {
             Ok(ip) => ip,
-            // The OpenTofu apply itself failed — surface as a structured
+            // The OpenTofu apply itself failed - surface as a structured
             // outcome (the decision loop logs it; no machine was created).
             Err(e) => {
                 tracing::error!(backend = %self.backend, error = %e, "tofu: provision apply failed");
@@ -572,11 +572,11 @@ impl Provisioner for TofuProvisioner {
             }
         };
         // Bootstrap contract : the MODULE owns the full machine
-        // bring-up — install the sentin8 `.deb` (golden image / cloud-init,
+        // bring-up - install the sentin8 `.deb` (golden image / cloud-init,
         // packaging design) and start captain pointed at the shared Valkey
         // registry (the variables above carry the bootstrap contract to the
         // module; cloud-init, container entrypoint, or MAAS deploy scripts
-        // consume it). Rust never SSHes — that kept the backend boundary
+        // consume it). Rust never SSHes - that kept the backend boundary
         // clean and made `docker` (no sshd) a valid backend. Proxy picks
         // the new machine's services up automatically from the registry.
         let bootstrap = bootstrap_command(&new_ip, config);
@@ -584,10 +584,10 @@ impl Provisioner for TofuProvisioner {
             ip = %new_ip,
             backend = %self.backend,
             bootstrap = %bootstrap,
-            "tofu: machine provisioned — module contract: captain running + Valkey-connected"
+            "tofu: machine provisioned - module contract: captain running + Valkey-connected"
         );
         // Post-provision sanity: the machine should appear in the registry
-        // shortly. We do NOT block — the next monitor tick's host-sample
+        // shortly. We do NOT block - the next monitor tick's host-sample
         // scan picks it up (2-min TTL on `captain:host:{ip}`), and the
         // provision-order list already got the IP for LIFO scale-in.
         Ok(ProvisionOutcome::Provisioned {
@@ -598,7 +598,7 @@ impl Provisioner for TofuProvisioner {
 
     async fn deprovision(&self, ip: &str) -> Result<(), anyhow::Error> {
         tracing::info!(ip, backend = %self.backend, "tofu: applying deprovision");
-        // FLEET-3 (DESIGN §11.5): graceful leave FIRST — best-effort call to
+        // FLEET-3 (DESIGN §11.5): graceful leave FIRST - best-effort call to
         // the target captain's /v1/captain/shutdown so services stop and
         // registry rows delete before the machine is destroyed. A
         // machine that cannot be reached is destroyed anyway (its rows
@@ -607,7 +607,7 @@ impl Provisioner for TofuProvisioner {
             tracing::warn!(
                 ip,
                 error = %e,
-                "tofu: graceful leave failed — destroying anyway (rows expire by TTL)"
+                "tofu: graceful leave failed - destroying anyway (rows expire by TTL)"
             );
         }
         let vars = [
@@ -627,12 +627,12 @@ impl Provisioner for TofuProvisioner {
 
 /// Ask the machine at `ip` to leave the fleet gracefully (FLEET-3,
 /// DESIGN §11.5): `POST /v1/captain/shutdown` on its captain stops its
-/// services, deletes its registry rows, and clears its enrollment record —
+/// services, deletes its registry rows, and clears its enrollment record -
 /// a clean exit instead of a destroyed machine's stale entries.
 ///
 /// Best-effort with a 10s cap: unreachable or refused machines return
 /// `Err` and the caller destroys anyway. The call is unauthenticated by
-/// design — the machine lock guarantees exactly one captain per IP and
+/// design - the machine lock guarantees exactly one captain per IP and
 /// only the operator plane (or the destruction path) knows fleet
 /// membership; a wrong-machine call shuts down a machine the caller
 /// already owns the lifecycle decision for.
@@ -662,14 +662,14 @@ async fn graceful_leave(ip: &str) -> Result<(), anyhow::Error> {
 pub struct MachineCandidate {
     /// The machine IP.
     pub ip: String,
-    /// Host CPU% (cgroup- or /proc-sourced — the telemetry mode decides).
+    /// Host CPU% (cgroup- or /proc-sourced - the telemetry mode decides).
     pub cpu_pct: f32,
     /// Host MEM%.
     pub mem_pct: f32,
 }
 
 /// Pure selection seam: rank machines that ADMIT the service (placement
-/// checked by the caller against each machine's instances) by load —
+/// checked by the caller against each machine's instances) by load -
 /// lowest combined (cpu+mem) first, this machine excluded (the leader
 /// spawns on its own machine through the normal local path; a
 /// leader-tries-leader call would be a same-machine retry of a decision
@@ -695,7 +695,7 @@ pub fn select_target_machine(
 /// the cert-bound `captain-remote` M2M workload's token
 /// (`sentin8:captain:instances:write`).
 ///
-/// The target's placement gate is the authority — a 409 means the machine
+/// The target's placement gate is the authority - a 409 means the machine
 /// it refuses (pin elsewhere, anti violation, singleton twin) and the
 /// caller records the alert and moves on. Transport failures are `Err`
 /// (retry next tick under the normal cooldown rules).
@@ -704,7 +704,7 @@ pub async fn remote_spawn(
     service_type: &str,
 ) -> Result<Vec<String>, anyhow::Error> {
     // auth DESIGN §4.3f: the `captain-remote` CERTIFICATE is
-    // the identity — presented on the TLS handshake of the remote
+    // the identity - presented on the TLS handshake of the remote
     // captain call; the target's TLS layer authenticates it and the
     // registry map authorizes `sentin8:captain:instances:write`.
     let issuer = sentin8::config::Sentin8Config::from_env().sentin8_auth_issuer();
@@ -748,7 +748,7 @@ pub async fn remote_spawn(
 }
 
 /// Extracted tail call: `evaluate`'s scale-out half found the pressure
-/// already placed (FLEET-4 remote spawn) — run only the scale-in half
+/// already placed (FLEET-4 remote spawn) - run only the scale-in half
 /// with the tick's machine list. Mirrors `scale_in`'s contract.
 async fn skip_to_scale_in(
     conn: &glide::GlideClient,
@@ -786,7 +786,7 @@ pub async fn release_leader_lock(conn: &glide::GlideClient) -> Result<(), glide:
 // ── The decision loop ──────────────────────────
 
 /// Read all fresh `captain:host:{ip}` samples (the 2-minute TTL means a
-/// machine whose captain died stops appearing — its samples expire).
+/// machine whose captain died stops appearing - its samples expire).
 /// List machines.
 pub async fn list_machines(conn: &glide::GlideClient) -> Result<Vec<MachineSample>, anyhow::Error> {
     let keys: Vec<String> = glide::cmd("KEYS")
@@ -806,7 +806,7 @@ pub async fn list_machines(conn: &glide::GlideClient) -> Result<Vec<MachineSampl
     Ok(machines)
 }
 
-/// Count live machines in the fleet — the registry rows across ALL IPs
+/// Count live machines in the fleet - the registry rows across ALL IPs
 /// (host samples expire after 2 min; the registry is the fleet's ground
 /// truth). Captain self-registers on every machine ( edge case 21).
 /// Handle count fleet machines.
@@ -819,7 +819,7 @@ pub async fn count_fleet_machines(conn: &glide::GlideClient) -> Result<usize, an
     for key in &keys {
         let entries: Vec<(String, String)> = conn.hgetall(key).await?;
         for (field, _json) in entries {
-            // Field = `{ip}:{port}` — the IP is everything before the last colon.
+            // Field = `{ip}:{port}` - the IP is everything before the last colon.
             if let Some(ip) = field.rsplit_once(':').map(|(ip, _)| ip) {
                 ips.insert(ip.to_string());
             }
@@ -843,7 +843,7 @@ async fn seconds_since_last_provision(
     Ok(Some((now - ts).max(0) as u64))
 }
 
-/// Record a provision (or dry-run decision) — starts the cooldown window.
+/// Record a provision (or dry-run decision) - starts the cooldown window.
 async fn record_provision(conn: &glide::GlideClient) -> Result<(), anyhow::Error> {
     let _: () = glide::cmd("SET")
         .arg(LAST_PROVISION_KEY)
@@ -860,7 +860,7 @@ pub async fn evaluate(
     conn: &glide::GlideClient,
     config: &CaptainConfig,
 ) -> Result<(), anyhow::Error> {
-    // Profile gate first — `never` means the whole role is inert.
+    // Profile gate first - `never` means the whole role is inert.
     if config.provision_profile == ProvisionProfile::Never {
         return Ok(());
     }
@@ -878,7 +878,7 @@ pub async fn evaluate(
     // ── Scale-out ─────────────────────────────────────────────
     // A machine saturated continuously for > window AND fleet headroom AND
     // cooldown elapsed → provision one machine. Under the `manual` profile
-    // the request is RECORDED (Valkey + alert) instead of executed — an
+    // the request is RECORDED (Valkey + alert) instead of executed - an
     // operator approves via POST /v1/captain/autoscaler/approve.
     let mut provision_req: Option<ProvisionRequest> = None;
     for m in &machines {
@@ -907,7 +907,7 @@ pub async fn evaluate(
         let headroom = (fleet as u32) < config.max_machines.max(1);
         // In-machine scaling must be exhausted first (/): the
         // busy service must already sit at MAX_INSTANCES on the trigger
-        // machine — otherwise the scaler still has headroom to add an
+        // machine - otherwise the scaler still has headroom to add an
         // instance locally and a new machine is premature. An unknown busy
         // service (older annotation / no Active instance) cannot be verified
         // and is treated as exhausted so the decision loop stays testable.
@@ -936,7 +936,7 @@ pub async fn evaluate(
 
     if let Some(req) = provision_req {
         // FLEET-4 (DESIGN §11.4): before provisioning a NEW machine, try
-        // placing the busy service on an EXISTING machine — remote spawn
+        // placing the busy service on an EXISTING machine - remote spawn
         // first, provision second. The selection is placement- and
         // load-aware; a 409/transport failure falls through to the
         // provision path (the next tick retries under the normal cooldown
@@ -962,23 +962,23 @@ pub async fn evaluate(
                         tracing::info!(
                             service = %req.busy_service,
                             target = %target.ip,
-                            "autoscaler: remote spawn placed the service on an existing machine — no new machine needed"
+                            "autoscaler: remote spawn placed the service on an existing machine - no new machine needed"
                         );
                         let _ = record_provision(conn).await;
-                        // Placed — the saturation pressure moves with it.
+                        // Placed - the saturation pressure moves with it.
                         // Skip the provision decision this tick.
                         return skip_to_scale_in(conn, config, machines, fleet).await;
                     }
                     Ok(_) => {
                         // Started nothing (already running there / not in
-                        // the target's catalog) — fall through to provision.
+                        // the target's catalog) - fall through to provision.
                     }
                     Err(e) => {
                         tracing::warn!(
                             service = %req.busy_service,
                             target = %target.ip,
                             error = %e,
-                            "autoscaler: remote spawn failed — falling through to machine provision"
+                            "autoscaler: remote spawn failed - falling through to machine provision"
                         );
                     }
                 }
@@ -987,7 +987,7 @@ pub async fn evaluate(
         let provisioner = resolve_provisioner(&config.provision_backend);
         if config.provision_profile == ProvisionProfile::Manual {
             // Manual profile: record a pending request for operator approval
-            // — nothing executes until POST /v1/captain/autoscaler/approve.
+            // - nothing executes until POST /v1/captain/autoscaler/approve.
             let pending = PendingRequest {
                 kind: "provision".into(),
                 ip: req.triggered_by_ip.clone(),
@@ -1009,7 +1009,7 @@ pub async fn evaluate(
             tracing::warn!(
                 triggered_by = %req.triggered_by_ip,
                 busy_service = %req.busy_service,
-                "captain.provision.requested: manual profile — operator approval \
+                "captain.provision.requested: manual profile - operator approval \
                  required (POST /v1/captain/autoscaler/approve)"
             );
             // The pending record starts the cooldown so the alert fires
@@ -1034,7 +1034,7 @@ pub async fn evaluate(
                         outcome = ?outcome,
                         "autoscaler: provision decision recorded"
                     );
-                    // Even a dry-run starts the cooldown — otherwise noop mode
+                    // Even a dry-run starts the cooldown - otherwise noop mode
                     // would alert every tick after the window.
                     let _ = record_provision(conn).await;
                 }
@@ -1047,7 +1047,7 @@ pub async fn evaluate(
     scale_in(conn, config, machines, fleet).await
 }
 
-/// The scale-in half of one autoscaler evaluation — extracted so the
+/// The scale-in half of one autoscaler evaluation - extracted so the
 /// remote-spawn placement path (FLEET-4) can skip the scale-out half
 /// without duplicating the idle logic. Same invariants: at most one
 /// machine per tick, LIFO never retires the base machine, cooldown is
@@ -1060,7 +1060,7 @@ async fn scale_in(
     fleet: usize,
 ) -> Result<(), anyhow::Error> {
     if (fleet as u32) <= config.min_machines.max(1) {
-        // At the floor — clear idle tracking so a later scale-out doesn't
+        // At the floor - clear idle tracking so a later scale-out doesn't
         // inherit a stale "idle for 10 minutes" state.
         idle_since().lock().unwrap().clear();
         return Ok(());
@@ -1086,7 +1086,7 @@ async fn scale_in(
     };
     if let Some(ip) = target_ip {
         // LIFO seam: among sustained-idle machines, retire the
-        // most-recently-provisioned one — the base machine is protected.
+        // most-recently-provisioned one - the base machine is protected.
         // The sustained-idle set feeds the picker; when several machines
         // are idle beyond the window, `scale_in_target` orders them by
         // provision history (LIFO) so the newest machine leaves first.
@@ -1108,7 +1108,7 @@ async fn scale_in(
             Some(t) => t.ip,
             None => ip.clone(),
         };
-        // Scale-in cooldown: reuse the provision cooldown key family — a
+        // Scale-in cooldown: reuse the provision cooldown key family - a
         // deprovision also bumps it so scale-out and scale-in never fire in
         // the same window (fleet flapping guard).
         let since_last = seconds_since_last_provision(conn).await?;
@@ -1133,7 +1133,7 @@ async fn scale_in(
                 .await;
             tracing::warn!(
                 ip = %selected,
-                "captain.deprovision.requested: manual profile — operator approval \
+                "captain.deprovision.requested: manual profile - operator approval \
                  required (POST /v1/captain/autoscaler/approve)"
             );
             let _ = record_provision(conn).await;
@@ -1250,6 +1250,6 @@ pub async fn approve(
         let _ = record_provision(conn).await;
         Ok(serde_json::json!({"status": "deprovisioned", "ip": ip}))
     } else {
-        anyhow::bail!("unknown pending kind {kind:?} — expected provision|deprovision")
+        anyhow::bail!("unknown pending kind {kind:?} - expected provision|deprovision")
     }
 }

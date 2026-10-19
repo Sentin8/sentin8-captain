@@ -6,7 +6,7 @@
 //! Sentin8:Policy integration for captain (Phase ).
 //!
 //! Thin re-export of the shared bridge (`sentin8::shield::runtime`). Captain
-//! is the process supervisor — its control endpoints are platform-operations
+//! is the process supervisor - its control endpoints are platform-operations
 //! surfaces gated by the enforced scope-mirror set (step 5).
 
 use std::sync::Arc;

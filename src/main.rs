@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
 // SPDX-License-Identifier: Apache-2.0
 
-//! Sentin8 Captain — process supervisor & orchestration layer.
+//! Sentin8 Captain - process supervisor & orchestration layer.
 //!
 //! Captain owns the Valkey service registry (`captain:svc:*`), spawns and
 //! supervises every other Sentin8 backend service on this machine, self-heals
@@ -15,7 +15,7 @@
 //! Captain sends its logs to Log over UDP (like every other service) AND
 //! writes them to `.run/logs/captain.log` (the sentin8 CLI redirects
 //! captain's stdout to this file). The Log feedback-loop guard is handled
-//! in `catalog.rs` — when captain spawns log, it sets
+//! in `catalog.rs` - when captain spawns log, it sets
 //! `SENTIN8_LOG_DESTINATIONS=""` so log doesn't echo to itself.
 //!
 //! See.
@@ -39,7 +39,7 @@ mod supervisor;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Self-registration flag (REG-15) — check BEFORE any config/env loading
+    // Self-registration flag (REG-15) - check BEFORE any config/env loading
     // (self-registration design pattern): `CaptainConfig::from_env`
     // requires SENTIN8_CAPTAIN_LOCAL_IP, which only `captain start` sets; a
     // probe must never pay that gate. The enroll path runs the binary with
@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
     // Seed the captain's OWN enrollment env (the boot/spawn paths call
     // `ensure_enrollment` for children, but the captain's internal
     // policy/bus DCR loops run in THIS process and forward the claim from
-    // its env — without this seeding they present empty headers and acme
+    // its env - without this seeding they present empty headers and acme
     // 401s them, minting nothing for `sentin8:captain*` workloads).
     if let Ok((secret, ts)) = crate::bootstrap::ensure_enrollment() {
         // SAFETY: main boot, before any task spawns.
@@ -78,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Valkey certificate identity (group DESIGN.md §3.1): the FIRST Valkey
     // connection (metrics publisher, service discovery, the registry) must
-    // already hold the `sentin8:captain` pair — the plane authenticates by
+    // already hold the `sentin8:captain` pair - the plane authenticates by
     // certificate and has no plaintext fallback. At a FRESH boot acme is
     // not up yet (captain spawns it), so the mint is NON-FATAL here: a
     // background loop keeps minting-or-loading until the pair lands, and
@@ -95,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
             Err(e) => {
                 tracing::warn!(
                     error = %e,
-                    "captain: Valkey identity not yet mintable (acme not up?) — \
+                    "captain: Valkey identity not yet mintable (acme not up?) - \
                      background retry until it lands; Valkey consumers degrade meanwhile"
                 );
                 tokio::spawn(async move {
@@ -110,7 +110,7 @@ async fn main() -> anyhow::Result<()> {
                         {
                             Ok(_) => {
                                 tracing::info!(
-                                    "captain: Valkey identity minted — Valkey consumers connect on their next retry"
+                                    "captain: Valkey identity minted - Valkey consumers connect on their next retry"
                                 );
                                 break;
                             }
@@ -134,7 +134,7 @@ async fn main() -> anyhow::Result<()> {
     let config = config::CaptainConfig::from_env();
     tracing::info!(
         service = "sentin8:captain",
-        // BUILDID-1: the full identity — {version}+{hash}[.d] — in the
+        // BUILDID-1: the full identity - {version}+{hash}[.d] - in the
         // banner; the spawn-seeded registry entry keeps version/build raw
         // (the monitor overwrites both from the first health probe).
         version = %sentin8::build_info::id(),

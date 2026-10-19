@@ -3,12 +3,12 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
 // SPDX-License-Identifier: Apache-2.0
 
-//! Process supervisor — spawn / stop / adopt / self-heal.
+//! Process supervisor - spawn / stop / adopt / self-heal.
 //!
 //! Owns the in-memory set of intentionally-stopped pids (to distinguish
 //! `Stopped` from `Killed`), the restart backoff schedule, the
 //! drain-until-idle helper (poll the instance's health gauge,
-//! cap-bounded — captain README §7), and the Post alert INSERT.
+//! cap-bounded - captain README §7), and the Post alert INSERT.
 
 use std::collections::HashSet;
 use std::sync::{Mutex, OnceLock};
@@ -21,7 +21,7 @@ use crate::store;
 /// The max restarts constant.
 pub const MAX_RESTARTS: i32 = 3;
 
-/// Upper bound on the drain-until-idle wait ([`drain_until_idle`]) —
+/// Upper bound on the drain-until-idle wait ([`drain_until_idle`]) -
 /// upgrades must never block indefinitely on a wedged connection
 /// (captain README §7).
 pub const DRAIN_CAP_S: u64 = 30;
@@ -33,9 +33,9 @@ pub const DRAIN_CAP_S: u64 = 30;
 ///
 /// - gauge reported and 0 → drain complete (exit immediately).
 /// - gauge reported and > 0 → poll again every 500ms, capped at `cap_s`
-///   total (the 30s ceiling — upgrades must never block indefinitely).
+///   total (the 30s ceiling - upgrades must never block indefinitely).
 /// - gauge unavailable (health probe failed, or the payload has no
-///   `active_connections` — a non-gauge service) → fall back to sleeping
+///   `active_connections` - a non-gauge service) → fall back to sleeping
 ///   the fixed `fallback_s` window (the pre-gauge behavior, bounded by
 ///   `cap_s`).
 ///
@@ -54,15 +54,15 @@ where
         let (count, probe_failed) = gauge().await;
         match (count, probe_failed) {
             // Gauge unavailable (probe failed, or the payload has no
-            // `active_connections` — a non-gauge service): fall back to
+            // `active_connections` - a non-gauge service): fall back to
             // the fixed drain window so upgrades still bound.
             (_, true) | (None, false) => {
                 tokio::time::sleep(fallback.saturating_sub(started.elapsed())).await;
                 break;
             }
-            // Drain complete — in-flight connections reached zero.
+            // Drain complete - in-flight connections reached zero.
             (Some(0), false) => break,
-            // Still draining — poll again in 500ms (or hit the cap).
+            // Still draining - poll again in 500ms (or hit the cap).
             (Some(_), false) => {
                 if started.elapsed() >= cap {
                     break;
@@ -78,12 +78,12 @@ where
 /// task that calls `wait` so the OS can clean up the zombie, plus a
 /// bind-failure classifier: a child that dies within seconds of spawn
 /// having never served traffic is checked for the classic bind-failure
-/// signature (`failed to bind ... Address already in use`) in its log —
+/// signature (`failed to bind ... Address already in use`) in its log -
 /// the respawn is FUTILE (the port is held by a foreign process) and must
 /// NOT be retried (captain DESIGN §8 invariant 10). The row is marked
 /// `BindFailed` and deleted, and the alert fires; the monitor's kill/respawn
 /// path never sees it. The child handle is owned by the task (not stored in
-/// a map) — we only track the pid for cleanup lookups.
+/// a map) - we only track the pid for cleanup lookups.
 pub fn register_child(pid: u32, child: tokio::process::Child) {
     tokio::spawn(async move {
         let mut child = child;
@@ -103,10 +103,10 @@ pub const STARTUP_FAIL_WINDOW_S: u64 = 10;
 
 /// Classify a freshly-exited child (captain DESIGN §8 invariant 10):
 /// find the exited child's registry row (alive only while `[`STARTUP_FAIL_WINDOW_S`]`
-/// of spawn — enforced by the `started_at` check below since `row_for_pid`
+/// of spawn - enforced by the `started_at` check below since `row_for_pid`
 /// only sees rows the reaping has not yet deleted) AND check its service log
 /// (the spawn redirects stderr there) for the bind-failure signature; on a
-/// match mark the row `BindFailed` (pid 0) and DELETE it — the port is held
+/// match mark the row `BindFailed` (pid 0) and DELETE it - the port is held
 /// by a foreign process, so respawning against it is futile and must never
 /// be retried; the alert (`captain.service.bind_failed`) surfaces the
 /// terminal state. A child that bound fine and crashed later does not carry
@@ -118,7 +118,7 @@ async fn reap_and_classify(pid: u32) {
         return; // row already deleted (upgrade cleanup, stop, …)
     };
     // Freshness gate: only a child that exited within the startup window is
-    // classified — a long-lived process dying while the log still contains an
+    // classified - a long-lived process dying while the log still contains an
     // OLD bind failure must never be misread (log files are append-only).
     let now = chrono::Utc::now().timestamp();
     if started_at.is_none_or(|t| now - t > STARTUP_FAIL_WINDOW_S as i64) {
@@ -129,7 +129,7 @@ async fn reap_and_classify(pid: u32) {
         return;
     };
     if !tail.contains("failed to bind") || !tail.contains("Address already in use") {
-        return; // not a bind failure — normal reaping
+        return; // not a bind failure - normal reaping
     }
     let Some(conn) = registry_conn().await else {
         return;
@@ -141,7 +141,7 @@ async fn reap_and_classify(pid: u32) {
             dead.pid = 0;
             dead.last_health_check = Some(chrono::Utc::now().timestamp());
             // Upsert the terminal row (publishes captain:changed) then delete it
-            // — the delete frees the port for the registry; the status mark keeps
+            // - the delete frees the port for the registry; the status mark keeps
             // pub/sub consumers from serving the dead pid in the interim.
             let _ = store::upsert_instance(&conn, &dead).await;
             let _ = store::delete_instance(&conn, &dead).await;
@@ -152,13 +152,13 @@ async fn reap_and_classify(pid: u32) {
         ip = %ip,
         port,
         pid,
-        "captain.service.bind_failed: child died binding its port — the port is held by another process; the instance is NOT respawned (respawning would loop against the same holder)"
+        "captain.service.bind_failed: child died binding its port - the port is held by another process; the instance is NOT respawned (respawning would loop against the same holder)"
     );
 }
 
 /// A standalone registry connection for the reaper task (the supervisor has
 /// no shared pool; the monitor's glide::GlideClient is not reachable here).
-/// Opens its own Valkey connection — one per classified child-exit, and
+/// Opens its own Valkey connection - one per classified child-exit, and
 /// only when the bind-failure signature matched.
 async fn registry_conn() -> Option<glide::GlideClient> {
     let url = std::env::var("SENTIN8_CAPTAIN_VALKEY_URL")
@@ -237,7 +237,7 @@ pub fn forget_intentionally_stopped(pid: u32) {
 /// `carried_restarts` governs the new row's `restarts` counter: when the
 /// caller respawns the SAME instance key (self-heal, restart action) it
 /// passes `Some(inst.restarts)` so the consecutive-restart count survives
-/// the swap — seeding 0 here would pin the counter below `MAX_RESTARTS`
+/// the swap - seeding 0 here would pin the counter below `MAX_RESTARTS`
 /// forever and a crash-loop could never reach the give-up alert (captain
 /// DESIGN §8 invariant 10). A genuinely fresh instance (scale-up, upgrade
 /// to a new port) passes `None` → 0.
@@ -257,7 +257,7 @@ pub async fn spawn(
     // Register the child so tokio reaps it when it exits (no zombies).
     register_child(pid, child);
     // Create a NEW instance record for the new port (don't overwrite the old one).
-    // The key is `{service_type}/{ip}:{port}` — so a different port = a different
+    // The key is `{service_type}/{ip}:{port}` - so a different port = a different
     // hash field.
     let new_inst = store::ServiceInstance {
         key: store::ServiceInstance::make_key(&inst.service_type, &inst.local_ip, local_port),
@@ -274,14 +274,14 @@ pub async fn spawn(
         status: "Starting".into(),
         restarts: carried_restarts.unwrap_or(0),
         started_at: Some(chrono::Utc::now().timestamp()),
-        // CAPTAIN-10: seed EMPTY version/build — the values are UNKNOWN until
+        // CAPTAIN-10: seed EMPTY version/build - the values are UNKNOWN until
         // the first health probe captures them from the service itself.
         // Seeding captain's own `{version}.{build_hash}` pair here made
         // `make status` display a duplicated version (`.`) during
         // the startup grace period (health probes are skipped for <15s and
         // the payload carried no `build` key to overwrite the stale hash).
         // Both health sides now emit `build` (CAPTAIN-10) and the seed stays
-        // empty — the VERSION column is blank, never wrong.
+        // empty - the VERSION column is blank, never wrong.
         version: String::new(),
         build_hash: String::new(),
         errors: 0,
@@ -319,7 +319,7 @@ pub async fn spawn_no_db(
 /// health gauge (captain README §7): the drain ends as soon as the gauge hits 0,
 /// bounded by the 30s cap (falling back to the fixed `drain_s` window
 /// when the service exposes no gauge). The probe mirrors the monitor's
-/// health probe — same `health_port` offset + HTTP flag — so it hits
+/// health probe - same `health_port` offset + HTTP flag - so it hits
 /// the same endpoint the monitor already validates. The process then
 /// receives SIGTERM and the instance transitions to `Stopping`.
 /// Handle stop.
@@ -331,16 +331,16 @@ pub async fn stop(
     grace_period_s: u64,
     drain_s: u64,
 ) -> Result<(), anyhow::Error> {
-    // : Drain — set Inactive so TLS/Proxy stop sending new traffic.
+    // : Drain - set Inactive so TLS/Proxy stop sending new traffic.
     store::mark_inactive(conn, inst).await?;
     tracing::info!(
         service = %inst.service_type,
         pid,
         drain_s,
-        "instance set to Inactive — draining traffic"
+        "instance set to Inactive - draining traffic"
     );
     // drain_s = 0 (abort cleanup of an instance that never served
-    // traffic) skips the drain poll entirely — the pre-gauge behavior.
+    // traffic) skips the drain poll entirely - the pre-gauge behavior.
     if drain_s > 0 {
         let drained = drain_until_idle(
             || {
@@ -364,7 +364,7 @@ pub async fn stop(
         );
     }
 
-    // : Stopping — send SIGTERM.
+    // : Stopping - send SIGTERM.
     store::mark_stopping(conn, inst).await?;
     mark_intentionally_stopped(pid);
     let _ = unsafe { kill_signal(pid, 15) };
@@ -415,7 +415,7 @@ pub enum HealAction {
         #[allow(dead_code)]
         restarts: i32,
     },
-    /// Intentional stop — no action.
+    /// Intentional stop - no action.
     NoAction,
 }
 
@@ -432,7 +432,7 @@ pub async fn self_heal(
     // pid_alive check since the process is already gone.
     //
     // The counter used for BOTH the MAX gate and the respawn carry is the
-    // FRESH post-increment value from `mark_killed` — carrying the
+    // FRESH post-increment value from `mark_killed` - carrying the
     // monitor's pre-increment snapshot re-seeded 0 on every cycle, the
     // count never grew, `MAX_RESTARTS` was unreachable, and boot-panic
     // crash-loops ran for hours (captain DESIGN §8 invariant 10).
@@ -448,7 +448,7 @@ pub async fn self_heal(
     };
     if killed.restarts >= MAX_RESTARTS {
         // WARN-10: the give-up is a FIRST-CLASS operator event, not a log
-        // line — record a captain:alerts entry (the startup stream + CLI
+        // line - record a captain:alerts entry (the startup stream + CLI
         // surface it) alongside the error log.
         let log_path = format!(
             "{}/logs/{}.log",
@@ -459,7 +459,7 @@ pub async fn self_heal(
             service_type: instance.service_type.clone(),
             restarts: killed.restarts,
             reason: format!(
-                "crash loop: {n} restarts without reaching Active — check the service log for the boot error",
+                "crash loop: {n} restarts without reaching Active - check the service log for the boot error",
                 n = killed.restarts
             ),
             log_path,
@@ -471,7 +471,7 @@ pub async fn self_heal(
         alert_service_failed(&instance.service_type, killed.restarts);
         // DUPROW-1 (DESIGN §5.10.2, "check the live process, not just the
         // row"): a live SIBLING row of the same service absorbs the
-        // alert's recovery duty — the service is NOT down, and deleting
+        // alert's recovery duty - the service is NOT down, and deleting
         // this row while the sibling serves must not leave the alert
         // driving the last-resort respawner into minting a duplicate.
         let siblings = store::list_for_ip(conn, &instance.local_ip)
@@ -485,7 +485,7 @@ pub async fn self_heal(
         if live_sibling {
             tracing::info!(
                 service = %instance.service_type,
-                "give-up: a live sibling instance serves this type — alert stays raised, no duplicate respawn duty"
+                "give-up: a live sibling instance serves this type - alert stays raised, no duplicate respawn duty"
             );
         }
         return Ok(HealAction::Alerted {
@@ -503,7 +503,7 @@ pub async fn self_heal(
     // kill-loop cycling both) would otherwise EACH self-heal, minting
     // two fresh processes per cycle forever. The sibling absorbs the
     // service; THIS row is deleted (the duplicate is worse than the
-    // lost row — the sibling's monitor path keeps the service alive).
+    // lost row - the sibling's monitor path keeps the service alive).
     let siblings = store::list_for_ip(conn, &killed.local_ip)
         .await
         .unwrap_or_default();
@@ -514,22 +514,22 @@ pub async fn self_heal(
         tracing::warn!(
             service = %killed.service_type,
             key = %killed.key,
-            "self-heal: a live sibling instance serves this type — deleting the dead duplicate row instead of respawning"
+            "self-heal: a live sibling instance serves this type - deleting the dead duplicate row instead of respawning"
         );
         let _ = store::delete_instance(conn, &killed).await;
         return Ok(HealAction::NoAction);
     }
-    // ORPHANLOOP-1 (DESIGN §5.10.2b, seam 2 — "the port is the truth; the
+    // ORPHANLOOP-1 (DESIGN §5.10.2b, seam 2 - "the port is the truth; the
     // row is a cache"): before any same-key respawn, check whether a LIVE
     // process already holds the target port. A stop/start can leave a
     // healthy orphan serving with NO registry row (its boot spawn died at
-    // bind against this very process — that is WHY the row is stale); a
+    // bind against this very process - that is WHY the row is stale); a
     // blind respawn here minted a child that died binding, wrote no row,
     // and the 25s kill-respawn loop repeated forever. Adopt-or-abstain:
     let expected_binary = crate::server::expected_binary_for(&killed.service_type, Some(entry));
     if let Some(holder_pid) = crate::server::pid_on_port(killed.local_port) {
         if crate::server::is_expected_binary(holder_pid, &expected_binary) {
-            // The row-less live process IS this service — adopt it: the row
+            // The row-less live process IS this service - adopt it: the row
             // is re-created at its live pid (status Active, alert cleared)
             // and NO child is spawned. The next probe succeeds and the
             // split-brain converges on this first heal cycle.
@@ -541,7 +541,7 @@ pub async fn self_heal(
                 tracing::warn!(
                     error = %e,
                     service = %killed.service_type,
-                    "self-heal: port-holder adoption upsert failed — falling through to spawn"
+                    "self-heal: port-holder adoption upsert failed - falling through to spawn"
                 );
             } else {
                 let _ = store::clear_alert(conn, &killed.service_type).await;
@@ -549,12 +549,12 @@ pub async fn self_heal(
                     service = %killed.service_type,
                     port = killed.local_port,
                     pid = holder_pid,
-                    "self-heal: adopted the row-less live process holding the port — no duplicate spawned (ORPHANLOOP-1)"
+                    "self-heal: adopted the row-less live process holding the port - no duplicate spawned (ORPHANLOOP-1)"
                 );
                 return Ok(HealAction::NoAction);
             }
         } else {
-            // A FOREIGN binary holds the port — the BindFailed posture:
+            // A FOREIGN binary holds the port - the BindFailed posture:
             // spawn would loop against the same holder. Leave the row
             // Killed and surface the conflict for the operator.
             tracing::error!(
@@ -562,14 +562,14 @@ pub async fn self_heal(
                 port = killed.local_port,
                 pid = holder_pid,
                 expected_binary = %expected_binary,
-                "self-heal: port held by a foreign process — row left Killed (operator intervention; respawning would loop)"
+                "self-heal: port held by a foreign process - row left Killed (operator intervention; respawning would loop)"
             );
             let _ = store::delete_instance(conn, &killed).await;
             return Ok(HealAction::NoAction);
         }
     }
     // Same-key respawn: carry the consecutive-restart count into the new row
-    // (captain DESIGN §8 invariant 10 — a per-spawn zero pinned the counter
+    // (captain DESIGN §8 invariant 10 - a per-spawn zero pinned the counter
     // below `MAX_RESTARTS` forever, so crash-loops never reached the give-up
     // alert).
     let new_pid = spawn(
@@ -591,14 +591,14 @@ pub async fn self_heal(
 ///
 /// (Previously this INSERTed into `inbox`; the orch_services
 /// registry is now Valkey-backed, so there is no DB pool available here.
-/// We emit a structured `tracing::error!` instead — the Log relay picks
+/// We emit a structured `tracing::error!` instead - the Log relay picks
 /// it up from the log sink.)
 /// Handle alert service failed.
 pub fn alert_service_failed(service_type: &str, restart_count: i32) {
     tracing::error!(
         service = service_type,
         restart_count,
-        "captain.service.failed: gave up after max restarts — manual intervention may be required"
+        "captain.service.failed: gave up after max restarts - manual intervention may be required"
     );
 }
 
@@ -611,7 +611,7 @@ pub fn alert_service_failed(service_type: &str, restart_count: i32) {
 pub fn alert_capacity(service_type: &str) {
     tracing::warn!(
         service = service_type,
-        "captain.scale.capacity: scale-up blocked — machine CPU/memory at capacity cap"
+        "captain.scale.capacity: scale-up blocked - machine CPU/memory at capacity cap"
     );
 }
 
@@ -631,7 +631,7 @@ unsafe fn kill_signal(pid: u32, sig: i32) -> i32 {
 /// `use_http_health` plain-HTTP flag) so the drain reads the same
 /// endpoint the monitor probes. Returns `(Some(count), false)` when the
 /// payload carries the gauge, `(None, false)` when the payload has no
-/// gauge (non-gauge service — e.g. `with_own_health` services that
+/// gauge (non-gauge service - e.g. `with_own_health` services that
 /// never adopted the field), and `(_, true)` when the health probe
 /// itself failed (connection refused mid-shutdown is normal). Reuses
 /// [`crate::health::probe`] so the warm client cache applies; the
@@ -675,7 +675,7 @@ mod drain_tests {
 
     #[tokio::test]
     async fn drain_exits_when_gauge_reaches_zero() {
-        // Gauge starts at 2, drops to 0 on the second poll — the drain
+        // Gauge starts at 2, drops to 0 on the second poll - the drain
         // must end well before the cap instead of sleeping it fully.
         let mut reads = 0u32;
         let elapsed = drain_until_idle(
@@ -695,7 +695,7 @@ mod drain_tests {
     #[tokio::test]
     async fn drain_caps_when_gauge_never_zero() {
         // A wedged gauge (always > 0) must not block the upgrade past the
-        // cap — with a 1s cap the helper returns at ~1s, not 30s.
+        // cap - with a 1s cap the helper returns at ~1s, not 30s.
         let elapsed = drain_until_idle(|| async { (Some(7u64), false) }, 1, 10).await;
         assert!(
             elapsed >= Duration::from_millis(500),
@@ -707,7 +707,7 @@ mod drain_tests {
     #[tokio::test]
     async fn drain_falls_back_to_fixed_window_when_gauge_absent() {
         // Non-gauge services (no `active_connections` in the payload) fall
-        // back to the fixed drain window — the pre-gauge behavior — and
+        // back to the fixed drain window - the pre-gauge behavior - and
         // do NOT wait the full 30s cap.
         let elapsed = drain_until_idle(|| async { (None, false) }, 5, 1).await;
         assert!(
@@ -733,7 +733,7 @@ mod drain_tests {
 
     #[tokio::test]
     async fn drain_fallback_is_bounded_by_cap() {
-        // An operator-configured fallback larger than the cap is clamped —
+        // An operator-configured fallback larger than the cap is clamped -
         // the 30s ceiling holds regardless of configuration.
         let elapsed = drain_until_idle(|| async { (None, false) }, 1, 60).await;
         assert!(

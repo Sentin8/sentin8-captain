@@ -16,11 +16,11 @@
 //! captain binary then PANICKED in `CaptainConfig::from_env` (missing
 //! `SENTIN8_CAPTAIN_LOCAL_IP`), aborting `dev-destroy.sh` (REG-14 made the
 //! probe tolerant). REG-15 closes the gap at the source: captain carries its
-//! own registration block like every other service — the flag check runs
+//! own registration block like every other service - the flag check runs
 //! BEFORE any config loading (self-registration design pattern).
 //!
 //! The scope-mirror policy set moved here from `vertical-registry.json`
-//! (single source of truth — SELFREG: the binary IS the source of truth).
+//! (single source of truth - SELFREG: the binary IS the source of truth).
 
 use sentin8::registration::{
     AdminScope, AdminUi, AdminUiPage, PgRole, PolicySetDecl, Registration, RelationDecl,
@@ -51,24 +51,24 @@ const ADMIN_UI_PAGES: &[AdminUiPage] = &[
     },
 ];
 
-/// Default declarative policy set (captain design — the enforced
+/// Default declarative policy set (captain design - the enforced
 /// scope-mirror that backs the `require_captain_policy` gate). Moved here
-/// from `vertical-registry.json` (REG-15) — the binary is the source of
+/// from `vertical-registry.json` (REG-15) - the binary is the source of
 /// truth; the registry JSON keeps no captain policies.
 const POLICIES: &[PolicySetDecl] = &[PolicySetDecl {
     policy_set_name: "scope-mirror",
-    description: "Action-granular scope permits for sentin8:captain over the LIVE effective scope set. Enforced — step 5 is the only gate.",
+    description: "Action-granular scope permits for sentin8:captain over the LIVE effective scope set. Enforced - step 5 is the only gate.",
     policies: "permit(principal, action == Action::\"sentin8:captain:admin\", resource) when { principal.scopes.contains(\"sentin8:captain:admin\") };\npermit(principal, action == Action::\"sentin8:captain:policy:read\", resource) when { principal.scopes.contains(\"sentin8:captain:policy:read\") };\npermit(principal, action == Action::\"sentin8:captain:policy:write\", resource) when { principal.scopes.contains(\"sentin8:captain:policy:write\") };\npermit(principal, action == Action::\"sentin8:captain:instances:write\", resource) when { principal.scopes.contains(\"sentin8:captain:instances:write\") };",
     schema: None,
     mode: "enforced",
     default_enabled: true,
 }];
 
-/// Default ReBAC relation tuples — none declared by this
+/// Default ReBAC relation tuples - none declared by this
 /// service today.
 const RELATIONS: &[RelationDecl] = &[];
 
-/// The OpenAPI spec closure — captain carries no utoipa spec (the management
+/// The OpenAPI spec closure - captain carries no utoipa spec (the management
 /// API is operator tooling, not CLI-derivable commands), so the closure
 /// emits `null` (the enroll path skips empty openapi output).
 fn openapi_spec() -> serde_json::Value {
@@ -81,7 +81,7 @@ fn openapi_spec() -> serde_json::Value {
 /// With `--section=<name>`, outputs only that section as a standalone JSON value.
 /// M2M DCR workload grants (self-registration ): this
 /// service's own `certless:<workload>` rows, upserted by `vertical enroll`.
-/// The static auth seed is retired — this declaration is the ONLY
+/// The static auth seed is retired - this declaration is the ONLY
 /// provisioning path ( "DCR is dynamic").
 /// Cover BOTH the full-identity `-policy` spelling (policy_bus_client) and
 /// the bare `{short}-policy` spelling (stat_emit); the gate's superset
@@ -105,13 +105,13 @@ const M2M_GRANTS: &[sentin8::registration::M2mGrant] = &[
     },
     sentin8::registration::M2mGrant {
         workload: "captain-remote",
-        // FLEET-4 (DESIGN §11.4): the remote-spawn workload — the
+        // FLEET-4 (DESIGN §11.4): the remote-spawn workload - the
         // cert-bound M2M identity the autoscaler leader presents to
         // another machine's captain when placing a service there.
         // Granular scope: instances only, never the operator admin scope.
         scopes: &["sentin8:captain:instances:write"],
     },
-    // TLS-RLS-4 (design/sentin8-vertical-data-plane-contract.md §VDC.7): the database-free HostContextResolver’s resolve workload — cache miss calls Sys `GET /v1/resolve/hostname`.
+    // TLS-RLS-4 (design/sentin8-vertical-data-plane-contract.md §VDC.7): the database-free HostContextResolver’s resolve workload - cache miss calls Sys `GET /v1/resolve/hostname`.
     sentin8::registration::M2mGrant {
         workload: "sentin8-captain-tls",
         scopes: &["sentin8:sys:instances:read"],

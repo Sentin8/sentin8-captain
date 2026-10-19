@@ -7,7 +7,7 @@
 //
 // Live tests against the platform Valkey (`VALKEY_URL`, default
 // `valkey://localhost:6379/0`). Skipped automatically when Valkey is
-// unreachable — run on a host where `make infra-up` has been executed.
+// unreachable - run on a host where `make infra-up` has been executed.
 //
 // Covered flows (runtime-skip pattern per testing-strategy §2.3):
 //   - registry lifecycle: upsert → read → delete → publish
@@ -28,11 +28,11 @@ use sentin8_captain_server::{monitor, scaler, supervisor};
 
 fn mk_service_type() -> String {
     // Colon identity form (architecture-principles.md §6.0) with a random
-    // service segment — exercises Valkey keys that embed colons.
+    // service segment - exercises Valkey keys that embed colons.
     format!("captain-it:{}", uuid::Uuid::new_v4().simple())
 }
 
-/// Unique synthetic IP per test — registry reads are IP-scoped
+/// Unique synthetic IP per test - registry reads are IP-scoped
 /// (`list_for_ip`, `cleanup_terminal_states`, `count_for_type_on_ip`),
 /// so a distinct IP makes every test fully independent despite
 /// cargo's parallel test threads.
@@ -47,7 +47,7 @@ async fn conn() -> Option<glide::GlideClient> {
     match sentin8::middleware::valkey_client(&url, "captain-test").await {
         Ok(c) => Some(c),
         Err(e) => {
-            eprintln!("skipping live tests — Valkey unreachable: {e}");
+            eprintln!("skipping live tests - Valkey unreachable: {e}");
             None
         }
     }
@@ -59,7 +59,7 @@ fn inst(svc: &str, port: u16, status: &str, restarts: i32) -> ServiceInstance {
         service_type: svc.into(),
         local_ip: "127.0.0.1".into(),
         local_port: port,
-        pid: 0, // no real process — pid_alive(0) is false
+        pid: 0, // no real process - pid_alive(0) is false
         start_priority: 50,
         cpu_avg_1m: 0.0,
         memory_avg_1m: 0.0,
@@ -67,7 +67,7 @@ fn inst(svc: &str, port: u16, status: &str, restarts: i32) -> ServiceInstance {
         latency_avg_1m_ms: 0.0,
         // Fresh timestamp: the proxy freshness gate (last_health_check < 30s)
         // is part of `list_active_for_type`, which `count_for_type_on_ip`
-        // builds on — instances must look traffic-ready to be counted.
+        // builds on - instances must look traffic-ready to be counted.
         last_health_check: Some(chrono::Utc::now().timestamp()),
         status: status.into(),
         restarts,
@@ -90,7 +90,7 @@ fn on_ip(mut i: ServiceInstance, ip: &str) -> ServiceInstance {
 fn dummy_entry(svc: &str) -> ServiceCatalogEntry {
     ServiceCatalogEntry {
         service_type: svc.into(),
-        binary: "true".into(), // exits immediately — never actually spawned in these tests
+        binary: "true".into(), // exits immediately - never actually spawned in these tests
         binary_path: String::new(),
         start_priority: 50,
         fixed_port: 0,
@@ -162,7 +162,7 @@ async fn status_transitions_update_the_registry() {
     let stopping = listed.iter().find(|i| i.service_type == svc).unwrap();
     assert_eq!(stopping.status, "Stopping");
 
-    // Stopped (clean exit) — pid cleared, not deleted by mark_stopped.
+    // Stopped (clean exit) - pid cleared, not deleted by mark_stopped.
     store::mark_stopped(&conn, stopping).await.unwrap();
     let listed = store::list_for_ip(&conn, &ip).await.unwrap();
     let stopped = listed.iter().find(|i| i.service_type == svc).unwrap();
@@ -193,7 +193,7 @@ async fn killed_increments_restarts() {
 
     let r2 = store::mark_killed(&conn, killed).await.unwrap();
     assert_eq!(r2.restarts, 2, "second kill → restarts = 2");
-    // Invariant 10: the returned snapshot is the FRESH post-increment value —
+    // Invariant 10: the returned snapshot is the FRESH post-increment value -
     // self_heal respawns from it, so a stale pre-increment snapshot can never
     // re-seed the counter (the 2026-10-01 crash-loop: counter pinned, MAX
     // unreachable, ~21k spawns).
@@ -213,7 +213,7 @@ async fn advisory_lock_acquire_release_and_steal() {
     let Some(c) = conn().await else { return };
     let conn = c;
     // Use a synthetic IP key so we never fight a real captain's lock.
-    let ip = "192.0.2.77"; // TEST-NET-1 — never routable
+    let ip = "192.0.2.77"; // TEST-NET-1 - never routable
     let lock_key = format!("captain:lock:{ip}");
 
     let acquired = store::try_advisory_lock(&conn, ip).await.unwrap();
@@ -431,7 +431,7 @@ async fn scaler_cooldown_decision_runs_over_active_only() {
     let svc = mk_service_type();
     let ip = mk_ip();
     // Starting instances are invisible to the scaler (one-tick promotion
-    // means Started is never produced — CAPTAIN-2 regression guard).
+    // means Started is never produced - CAPTAIN-2 regression guard).
     let starting = on_ip(inst(&svc, 9513, "Starting", 0), &ip);
     store::upsert_instance(&conn, &starting).await.unwrap();
 

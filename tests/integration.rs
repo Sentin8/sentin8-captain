@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
 // SPDX-License-Identifier: Apache-2.0
 
-// Captain unit tests — supervisor + scaler pure seams (testing-strategy
+// Captain unit tests - supervisor + scaler pure seams (testing-strategy
 // §3.1; TEST-1/TEST-2 in services/captain/BACKLOG.md).
 //
 // Pure-testable seams only:
@@ -24,7 +24,7 @@ use sentin8_captain_server::supervisor;
 
 #[test]
 fn backoff_doubles_per_restart() {
-    // 1, 2, 4, 8 — exponential.
+    // 1, 2, 4, 8 - exponential.
     assert_eq!(supervisor::backoff_delay_secs(0), 1);
     assert_eq!(supervisor::backoff_delay_secs(1), 2);
     assert_eq!(supervisor::backoff_delay_secs(2), 4);
@@ -39,7 +39,7 @@ fn backoff_never_negative_count() {
 
 #[test]
 fn backoff_caps_at_16_seconds() {
-    // 1u64.checked_shl(n).unwrap_or(16) — the cap pins the max wait.
+    // 1u64.checked_shl(n).unwrap_or(16) - the cap pins the max wait.
     assert_eq!(supervisor::backoff_delay_secs(4), 16);
     assert_eq!(supervisor::backoff_delay_secs(100), 16);
 }
@@ -110,7 +110,7 @@ fn probe_signature_warm_rejected_forms() {
 fn probe_signature_never_connected_is_transport_only() {
     use sentin8_captain_server::monitor::{probe_error_signature, WarmUpSignature};
     // Connect refusal / timeout with no HTTP layer reached (the resolver
-    // waiting for the very first cert) — a warm-up failure, not a kill
+    // waiting for the very first cert) - a warm-up failure, not a kill
     // signal, while in grace.
     assert_eq!(
         probe_error_signature(
@@ -127,12 +127,12 @@ fn probe_signature_never_connected_is_transport_only() {
 #[test]
 fn probe_signature_non2xx_is_http_layer_not_warmup() {
     use sentin8_captain_server::monitor::{probe_error_signature, WarmUpSignature};
-    // An HTTP answer IS reached — a broken-but-listening service counts
+    // An HTTP answer IS reached - a broken-but-listening service counts
     // toward the kill exactly like before (never masked by the grace).
     assert_eq!(
         probe_error_signature("non-2xx status 500"),
         WarmUpSignature::NonTls,
-        "non-2xx is an HTTP-layer answer — the warm-up grace must not mask it"
+        "non-2xx is an HTTP-layer answer - the warm-up grace must not mask it"
     );
     let warm = sentin8_captain_server::monitor::tls_warm_up(WarmUpSignature::NonTls);
     assert!(!warm, "NonTls never counts as warm-up");
@@ -192,7 +192,7 @@ fn cert_grace_config_defaults_pinned() {
 fn startup_failure_window_bounds_reap_classification() {
     // The reaper only classifies fresh exits inside this window; a
     // longer-lived process's death is never misread as a bind failure
-    // (log files are append-only — an old signature must not linger).
+    // (log files are append-only - an old signature must not linger).
     assert!(supervisor::STARTUP_FAIL_WINDOW_S < 60);
 }
 
@@ -227,7 +227,7 @@ fn valkey_key_namespaces_by_service_type() {
     assert_eq!(
         ServiceInstance::valkey_key("auth"),
         "captain:svc:auth",
-        "glob captain:svc:* must match — discovery KEYS scan depends on it"
+        "glob captain:svc:* must match - discovery KEYS scan depends on it"
     );
     // Colon identity embeds cleanly in the key (§6.0).
     assert_eq!(
@@ -239,7 +239,7 @@ fn valkey_key_namespaces_by_service_type() {
 
 #[test]
 fn instance_key_is_ip_port() {
-    // The hash field is {ip}:{port} — service_type is NOT in the field,
+    // The hash field is {ip}:{port} - service_type is NOT in the field,
     // so two services on the same ip:port would collide. Pin the shape.
     assert_eq!(
         ServiceInstance::make_key("auth", "10.0.0.5", 3101),
@@ -269,7 +269,7 @@ fn instance_json_roundtrip_preserves_metrics() {
 
 #[test]
 fn instance_json_new_fields_default() {
-    // Older registry entries (pre rss_mb/version/errors) must still parse —
+    // Older registry entries (pre rss_mb/version/errors) must still parse -
     // #[serde(default)] on the newer fields is load-bearing for upgrades.
     let legacy = r#"{
         "key": "127.0.0.1:3101", "service_type": "auth", "local_ip": "127.0.0.1",
@@ -561,7 +561,7 @@ fn scaler_port_scan_never_double_allocates() {
 #[test]
 fn parallel_upgrades_get_distinct_ports() {
     // UPGRADE-RACE-1 seam: the reservation key derives deterministically
-    // from (ip, port) — the pure seam pins the key shape and the NX
+    // from (ip, port) - the pure seam pins the key shape and the NX
     // semantics simulated by a shared "already reserved" set. Two
     // concurrent pickers scanning the same free range must walk past
     // each other's candidates instead of returning the same port.
@@ -577,7 +577,7 @@ fn parallel_upgrades_get_distinct_ports() {
         }
     };
     // First upgrade takes 8004; the second concurrent upgrade must NOT
-    // get 8004 — it walks to 8005.
+    // get 8004 - it walks to 8005.
     let a = try_acquire("10.0.0.1", 8004, &mut reserved);
     let b = try_acquire("10.0.0.1", 8004, &mut reserved);
     assert_eq!(a, Some(8004));
@@ -624,7 +624,7 @@ fn machine(
 fn provision_profile_parse() {
     use sentin8_captain_server::provision::ProvisionProfile;
     // Unset → Auto (the operational default; with the default noop backend
-    // that is a dry-run). Unknown values fail safe to Never — a config typo
+    // that is a dry-run). Unknown values fail safe to Never - a config typo
     // must not silently enable real provisioning.
     assert_eq!(ProvisionProfile::parse(None), ProvisionProfile::Auto);
     assert_eq!(
@@ -717,7 +717,7 @@ fn provision_scale_in_skips_busy_machines() {
     use sentin8_captain_server::provision::scale_in_target;
     let order = vec!["10.0.0.1".to_string(), "10.0.0.2".to_string()];
     let samples = vec![
-        machine("10.0.0.1", 50.0, 60.0, false), // busy — not idle
+        machine("10.0.0.1", 50.0, 60.0, false), // busy - not idle
         machine("10.0.0.2", 1.0, 5.0, false),   // idle
     ];
     let target = scale_in_target(&samples, &order).unwrap();
@@ -740,7 +740,7 @@ fn provision_scale_in_no_candidates() {
 
 #[test]
 fn provision_fleet_size_counts_distinct_machines() {
-    // The fleet size is simply the count of fresh host samples — the
+    // The fleet size is simply the count of fresh host samples - the
     // 2-minute TTL means dead machines drop out automatically.
     let samples = [
         machine("10.0.0.1", 1.0, 1.0, false),
@@ -756,7 +756,7 @@ fn provision_fleet_size_counts_distinct_machines() {
 #[test]
 fn provision_machine_sample_parses_legacy_annotations() {
     use sentin8_captain_server::provision::MachineSample;
-    // Pre-PROVISION-1 payloads have no saturated/saturated_service —
+    // Pre-PROVISION-1 payloads have no saturated/saturated_service -
     // must parse defensively (serde-default discipline, TEST-4 pattern).
     let legacy = r#"{"cpu_pct": 12.5, "mem_pct": 40.0, "used_mb": 8192.0, "ts": 1692912345}"#;
     let m = MachineSample::from_json("10.0.0.9", legacy).unwrap();
@@ -776,7 +776,7 @@ fn provision_machine_sample_parses_legacy_annotations() {
 fn provision_constants_are_sane() {
     use sentin8_captain_server::catalog;
     // The saturation thresholds must be reachable (lower than the never-scale
-    // §4.7 machine-cap pins) — otherwise the signal can never fire.
+    // §4.7 machine-cap pins) - otherwise the signal can never fire.
     assert!(catalog::PROVISION_CPU_CAP_PCT < catalog::MACHINE_CPU_CAP_PCT);
     assert!(catalog::PROVISION_MEM_CAP_PCT < catalog::MACHINE_MEM_CAP_PCT);
     // Window + cooldown are positive and the idle window is longer than the

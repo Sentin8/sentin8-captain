@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the Sentin8:Captain
 // SPDX-License-Identifier: Apache-2.0
 
-//! Monitor loop — runs every `monitor_tick_s` seconds. For each owned row
+//! Monitor loop - runs every `monitor_tick_s` seconds. For each owned row
 //! (`local_ip = SENTIN8_CAPTAIN_LOCAL_IP`) it samples CPU/memory, probes health,
 //! updates the row's metrics, transitions status, and triggers
 //! self-healing when a process is dead or unresponsive.
@@ -16,7 +16,7 @@ use std::time::Duration;
 use crate::config::CaptainConfig;
 use crate::{health, procfs, store, supervisor};
 
-/// Global shutdown flag — when true, the monitor loop stops self-healing
+/// Global shutdown flag - when true, the monitor loop stops self-healing
 /// (spawning new instances) so `shutdown_all_services` can bring everything
 /// down without the monitor fighting it.
 static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
@@ -32,10 +32,10 @@ pub fn set_shutting_down() {
 /// The upgrade publishes progress under BOTH identities (captain DESIGN §8
 /// invariant 9): the OLD instance's key (`captain:upgrade:{ip}:{port}`) and
 /// the spawned NEW instance's key (`captain:upgrade:new:{ip}:{port}`). The
-/// guard checks both — matching only the old key left the flapping new
+/// guard checks both - matching only the old key left the flapping new
 /// instance unshielded, and the monitor respawned it every tick through the
 /// whole upgrade. If either key exists, the monitor must NOT self-heal the
-/// instance — the upgrade's abort path handles cleanup.
+/// instance - the upgrade's abort path handles cleanup.
 /// Handle is upgrade in progress.
 pub async fn is_upgrade_in_progress(conn: &glide::GlideClient, key: &str) -> bool {
     let upgrade_key = format!("captain:upgrade:{key}");
@@ -57,7 +57,7 @@ pub async fn is_upgrade_in_progress(conn: &glide::GlideClient, key: &str) -> boo
 }
 
 /// Per-instance rolling window for CPU, memory, and latency.
-/// 6 samples at the monitor tick — set `SENTIN8_CAPTAIN_MONITOR_TICK_S=10`
+/// 6 samples at the monitor tick - set `SENTIN8_CAPTAIN_MONITOR_TICK_S=10`
 /// for a literal 1-minute window.
 #[derive(Debug, Clone, Default)]
 /// The rollingwindow type.
@@ -76,7 +76,7 @@ pub struct RollingWindow {
     /// Ticks since the instance became `Active` (for cooldown reset).
     /// The started ticks.
     pub started_ticks: u32,
-    /// The most recent probe failure mode (empty when healthy) — rides the
+    /// The most recent probe failure mode (empty when healthy) - rides the
     /// kill log so a kill decision is auditable (probe timeout vs
     /// connection refusal vs non-2xx).
     pub last_probe_error: String,
@@ -96,7 +96,7 @@ pub fn spawn(
     config: CaptainConfig,
     live_catalog: Arc<RwLock<HashMap<String, crate::catalog::ServiceCatalogEntry>>>,
 ) {
-    // Spawn the rollup metrics subscriber — listens to `stat:rollups:day`
+    // Spawn the rollup metrics subscriber - listens to `stat:rollups:day`
     // on Valkey and updates both API call counts and error/warning counts
     // on service instances. Stat's embedded worker aggregates raw metrics
     // from services (stat:metrics:tls for traffic, stat:metrics:log for
@@ -104,7 +104,7 @@ pub fn spawn(
     // the aggregated rollups rather than subscribing to raw channels.
     spawn_rollup_metrics_subscriber(conn.clone(), config.clone(), live_catalog.clone());
 
-    // Spawn the daily-reset task — zeroes the `restarts`/`errors`/
+    // Spawn the daily-reset task - zeroes the `restarts`/`errors`/
     // `warnings`/`api_calls` display counters once per day at 00:00 UTC
     // so `make status` shows a rolling 24-hour window.
     spawn_daily_reset(conn.clone(), config.clone());
@@ -118,13 +118,13 @@ pub fn spawn(
         let cooldown_reset_s = config.cooldown_reset_s.max(1);
         loop {
             if SHUTTING_DOWN.load(Ordering::SeqCst) {
-                tracing::info!("monitor: shutting down — exiting monitor loop");
+                tracing::info!("monitor: shutting down - exiting monitor loop");
                 return;
             }
             // Enrollment-claim TTL rotation (CAPT-ENROLL-1): re-stamp the sealed
             // record before its TTL expires so acme's bearer-less first-boot DCR
             // channel never goes stale while the captain is up (boot/spawn alone
-            // only stamp at process start — after the first 10 minutes every
+            // only stamp at process start - after the first 10 minutes every
             // fresh DCR mint 401'd). Cheap idempotent no-op while the record is
             // fresh (captain DESIGN §7 task topology).
             crate::bootstrap::restamp_enrollment_if_expiring();
@@ -164,11 +164,11 @@ async fn run_tick(
         if pid == 0 {
             // pid == 0 means the instance was Killed (or BindFailed) and the pid
             // was cleared. Try to self-heal (restart) if restarts < MAX_RESTARTS
-            // — but NOT during shutdown (don't fight shutdown_all_services),
+            // - but NOT during shutdown (don't fight shutdown_all_services),
             // and NOT if an upgrade is in progress for this instance (the
             // upgrade's abort path handles cleanup). BindFailed is TERMINAL
             // (captain DESIGN §8 invariant 10): the child died binding a port
-            // held by a foreign process — respawning would loop against the
+            // held by a foreign process - respawning would loop against the
             // same holder, so the row is left for operator intervention.
             if inst.status == "BindFailed" {
                 continue;
@@ -178,7 +178,7 @@ async fn run_tick(
                 && !is_upgrade_in_progress(conn, &inst.key).await
             {
                 // DUPROW-1 (DESIGN §5.10.2): the tick's snapshot can be
-                // seconds stale — RE-READ the row before acting. A row
+                // seconds stale - RE-READ the row before acting. A row
                 // deleted under the tick (upgrade completion, give-up)
                 // must not be resurrected by `mark_killed`'s HSET-Back.
                 match store::get_instance(conn, &inst.service_type, &inst.key).await {
@@ -187,14 +187,14 @@ async fn run_tick(
                     }
                     Ok(None) => {
                         // Row vanished (stop/upgrade completed under the
-                        // tick): leave it dead — its owner handled cleanup.
+                        // tick): leave it dead - its owner handled cleanup.
                         continue;
                     }
                     Err(e) => {
                         tracing::debug!(
                             error = ?e,
                             key = %inst.key,
-                            "monitor: Killed-row re-read failed — skipping self-heal this tick"
+                            "monitor: Killed-row re-read failed - skipping self-heal this tick"
                         );
                         continue;
                     }
@@ -206,11 +206,11 @@ async fn run_tick(
         if !procfs::pid_alive(pid) {
             if supervisor::is_intentionally_stopped(pid) || SHUTTING_DOWN.load(Ordering::SeqCst) {
                 // Already being stopped by Captain (or we're shutting down)
-                // — let `stop` / `shutdown_all_services` handle it.
+                // - let `stop` / `shutdown_all_services` handle it.
                 continue;
             }
             // Don't self-heal if an upgrade is in progress for this
-            // instance — the upgrade's abort path will stop the new
+            // instance - the upgrade's abort path will stop the new
             // instance and clean it up. Self-healing here would respawn
             // the crashed process and fight the upgrade.
             if is_upgrade_in_progress(conn, &inst.key).await {
@@ -218,7 +218,7 @@ async fn run_tick(
                     service = %inst.service_type,
                     key = %inst.key,
                     pid,
-                    "monitor: process dead but upgrade in progress — skipping self-heal"
+                    "monitor: process dead but upgrade in progress - skipping self-heal"
                 );
                 continue;
             }
@@ -235,7 +235,7 @@ async fn run_tick(
                     if fresh.pid != 0 && procfs::pid_alive(fresh.pid) =>
                 {
                     // The row changed under the tick (a respawn already
-                    // happened, or the pid was reassigned) — the fresh
+                    // happened, or the pid was reassigned) - the fresh
                     // process is alive; nothing to heal.
                     continue;
                 }
@@ -244,7 +244,7 @@ async fn run_tick(
                 }
                 Ok(None) => {
                     // Row deleted under the tick (upgrade complete /
-                    // give-up / stop): its owner handled cleanup — the
+                    // give-up / stop): its owner handled cleanup - the
                     // stale snapshot must NOT resurrect it.
                     continue;
                 }
@@ -252,13 +252,13 @@ async fn run_tick(
                     tracing::debug!(
                         error = ?e,
                         key = %inst.key,
-                        "monitor: dead-row re-read failed — skipping self-heal this tick"
+                        "monitor: dead-row re-read failed - skipping self-heal this tick"
                     );
                     continue;
                 }
             }
         }
-        // Sample CPU/memory — tick-based (diff between consecutive
+        // Sample CPU/memory - tick-based (diff between consecutive
         // monitor ticks, no sleep). Same 10s window as the host CPU
         // sample, so per-service and host CPU% are directly comparable.
         let sample = procfs::sample_tick(pid);
@@ -267,7 +267,7 @@ async fn run_tick(
         // were started less than 15 seconds ago. This gives services
         // time to bind their port and connect to the DB. Operations like
         // CA init, DCR, and M2M registration should happen AFTER the
-        // health endpoint is up — they are post-startup tasks, not
+        // health endpoint is up - they are post-startup tasks, not
         // startup-blocking tasks.
         let now = chrono::Utc::now().timestamp();
         let startup_age = inst.started_at.map(|s| now - s).unwrap_or(0);
@@ -275,7 +275,7 @@ async fn run_tick(
         // CAPT-PROBE-3 (DESIGN §5.10.2): the TLS WARM-UP grace (classified AFTER the probe
         // below). A fresh service binds its listener FIRST but accepts
         // handshakes only once its on-demand server cert has landed from
-        // acme — until then every probe dies with `AccessDenied` (or never
+        // acme - until then every probe dies with `AccessDenied` (or never
         // connects). Under fleet-wide cold starts / retry storms the acme
         // mint path can stay saturated LONGER than the raw probe threshold,
         // so killing on it mass-murdered just-started installs. Within
@@ -283,7 +283,7 @@ async fn run_tick(
         // instead of counting toward the kill.
         let in_cert_grace = startup_age < config.cert_grace_s.max(0);
 
-        // Health probe — skip for workers (no inbound port / health endpoint).
+        // Health probe - skip for workers (no inbound port / health endpoint).
         // Also skip during startup grace period (probe always succeeds).
         let is_worker = sentin8::config::is_worker_service(&inst.service_type);
         let probe = if is_worker || in_startup_grace {
@@ -333,7 +333,7 @@ async fn run_tick(
                 key = %inst.key,
                 handshake_ms = hs_ms,
                 total_rtt_ms = probe.latency_ms,
-                "cold probe connection — PQ handshake paid (amortizing)"
+                "cold probe connection - PQ handshake paid (amortizing)"
             );
         }
         let cpu_avg = avg(&win.cpu);
@@ -359,10 +359,10 @@ async fn run_tick(
             win.consecutive_failures = 0;
             // Starting/Started → Active on first healthy probe.
             // The health endpoint responding means the service is ready
-            // for traffic — no need to wait a second tick.
+            // for traffic - no need to wait a second tick.
             if inst.status == "Starting" || inst.status == "Started" {
                 let _ = store::mark_active(conn, &inst).await;
-                // WARN-10: the service recovered — clear any crash-loop
+                // WARN-10: the service recovered - clear any crash-loop
                 // alert so the operator surface reflects reality.
                 if let Err(e) = store::clear_alert(conn, &inst.service_type).await {
                     tracing::debug!(error = ?e, service = %inst.service_type, "alert clear failed");
@@ -373,7 +373,7 @@ async fn run_tick(
                 win.started_ticks += 1;
                 // Stale-alert hygiene (DUPROW-1 follow-up, DESIGN §4
                 // alerts row): the clear must fire on ANY healthy
-                // Active path — boot adoption reaches Active without
+                // Active path - boot adoption reaches Active without
                 // passing through `Starting`, and a transition-only
                 // clear left crash-era alerts pinned on healthy services
                 // forever. Idempotent HDEL on the first healthy tick;
@@ -391,13 +391,13 @@ async fn run_tick(
             }
         } else {
             win.consecutive_failures += 1;
-            // CAPT-PROBE-3 (DESIGN §5.10.2): TLS warm-up — not unresponsiveness. The
+            // CAPT-PROBE-3 (DESIGN §5.10.2): TLS warm-up - not unresponsiveness. The
             // process is alive (we only reach this branch past the
             // pid-alive check); its cert fetch is pending. Both warm-up
             // shapes share the window: the listener answered the TCP
             // connect and the TLS layer refused until the cert lands
             // (`AccessDenied` alert / certificate- or handshake-bearing
-            // rustls text) — or the connect never comes back because the
+            // rustls text) - or the connect never comes back because the
             // resolver is still waiting for the very first cert (refusal
             // + timeout forms). Within `cert_grace_s` such failures reset
             // the counter instead of counting toward the kill; a failure
@@ -410,11 +410,11 @@ async fn run_tick(
                     key = %inst.key,
                     startup_age_s = startup_age,
                     error = %probe.error,
-                    "probe failed on TLS warm-up (cert fetch pending) — in grace, not counting"
+                    "probe failed on TLS warm-up (cert fetch pending) - in grace, not counting"
                 );
                 win.consecutive_failures = 0;
             }
-            // CAPT-5 (captain DESIGN §5): the monitor NEVER kills captain itself —
+            // CAPT-5 (captain DESIGN §5): the monitor NEVER kills captain itself -
             // the self-probe goes through the same tokio runtime that services the
             // management API, so a busy window (an upgrade's 60s soak, a drain
             // poll burst) can starve 2s-timeout probes without the process being
@@ -428,27 +428,27 @@ async fn run_tick(
                         service = %inst.service_type,
                         pid,
                         failures = win.consecutive_failures,
-                        "captain self-probe failed — NOT killing self (monitor must never commit suicide)"
+                        "captain self-probe failed - NOT killing self (monitor must never commit suicide)"
                     );
                     win.consecutive_failures = 0;
                 } else {
                     // Unresponsive but alive → kill, then self-heal. The last probe's
-                    // error string rides the kill log — a misdiagnosed kill (stale
+                    // error string rides the kill log - a misdiagnosed kill (stale
                     // pooled connection, timeout vs refusal) must be auditable.
                     //
                     // ORPHANLOOP-1 (DESIGN §5.10.2b, seam 1): the failure
-                    // window spans multiple ticks — the snapshot's pid can
+                    // window spans multiple ticks - the snapshot's pid can
                     // have died (or been recycled by an unrelated process)
                     // under it. RE-VERIFY liveness immediately before the
                     // signal: never `kill_signal` a pid that is not alive
                     // RIGHT NOW. A stale-pid kill was a phantom no-op that
                     // masked the dead-row path (the row said Active, the
-                    // pid was long gone — the 25s kill-respawn loop).
+                    // pid was long gone - the 25s kill-respawn loop).
                     if !crate::procfs::pid_alive(pid) {
                         tracing::debug!(
                             service = %inst.service_type,
                             pid,
-                            "kill skipped — pid died under the failure window; dead-row path takes it"
+                            "kill skipped - pid died under the failure window; dead-row path takes it"
                         );
                     } else {
                         tracing::warn!(
@@ -476,7 +476,7 @@ async fn run_tick(
     }
 
     // Sample whole-host CPU/memory and store in Valkey for the Machines
-    // table. One sample per tick — the CLI reads the latest value.
+    // table. One sample per tick - the CLI reads the latest value.
     // PROVISION-1 : the payload is annotated with a
     // `saturated` flag when the host crosses the saturation thresholds
     // the autoscaler role (crate::provision) reads this annotation from
@@ -485,7 +485,7 @@ async fn run_tick(
     let saturated = crate::provision::is_saturated(host.cpu_pct, host.mem_pct);
     if saturated {
         // Which service is busy on this machine? The busiest Active instance
-        // (highest CPU) is recorded with the annotation — the autoscaler's
+        // (highest CPU) is recorded with the annotation - the autoscaler's
         // decision needs the busy service to check it is at
         // MAX_INSTANCES before provisioning.
         let instances = crate::store::list_for_ip(conn, &config.local_ip)
@@ -520,7 +520,7 @@ async fn run_tick(
             .arg(&host_key)
             .arg(serde_json::to_string(&host_payload).unwrap_or_default())
             .arg("EX")
-            .arg(120) // 2-minute TTL — stale if captain dies
+            .arg(120) // 2-minute TTL - stale if captain dies
             .query_async(conn)
             .await
             .unwrap_or(());
@@ -537,7 +537,7 @@ async fn run_tick(
             .arg(&host_key)
             .arg(serde_json::to_string(&host_payload).unwrap_or_default())
             .arg("EX")
-            .arg(120) // 2-minute TTL — stale if captain dies
+            .arg(120) // 2-minute TTL - stale if captain dies
             .query_async(conn)
             .await
             .unwrap_or(());
@@ -556,7 +556,7 @@ async fn run_tick(
     // acme can verify any machine's first-boot claim (multi-host fleets:
     // acme is a fleet singleton pinned to the base machine, but a
     // provisioned machine's workloads still need enrollment mints). Same
-    // 120s freshness window as the host sample — a dead machine's record
+    // 120s freshness window as the host sample - a dead machine's record
     // expires with its host row. Fail-open (best-effort write): the
     // LOCAL sealed file remains the authoritative verification path on
     // the machine that owns acme.
@@ -587,7 +587,7 @@ fn push_sample(buf: &mut Vec<f32>, v: f32) {
     buf.push(v);
 }
 
-/// Cooldown decision seam — pure so TEST-1 can pin the reset policy:
+/// Cooldown decision seam - pure so TEST-1 can pin the reset policy:
 /// `restarts` resets to 0 only after the instance has been healthy for at
 /// least `cooldown_reset_s` AND has a positive restart count (a clean
 /// instance never needs a reset).
@@ -601,16 +601,16 @@ pub fn cooldown_due(healthy_for_s: i64, cooldown_reset_s: i64, restarts: i32) ->
 ///
 /// Two concrete shapes:
 /// - `WarmRejected`: the listener accepted the TCP connect but the TLS
-///   layer rejected/failed the handshake until the cert lands — the
+///   layer rejected/failed the handshake until the cert lands - the
 ///   probe error carries the `AccessDenied` alert, or certificate- /
 ///   handshake-bearing rustls text.
 /// - `NeverConnected`: the resolver is waiting for the very FIRST cert
-///   so nothing is listening behind the TLS accept yet — connect
+///   so nothing is listening behind the TLS accept yet - connect
 ///   refusal / timeout with no HTTP layer reached at all (no status
 ///   code; the probe's transport failure class).
 ///
 /// `NonTls` is everything else (a non-2xx status IS an HTTP-layer
-/// answer — an app-level failure, never warm-up).
+/// answer - an app-level failure, never warm-up).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WarmUpSignature {
     /// TLS layer rejected the handshake while waiting for a cert.
@@ -628,7 +628,7 @@ pub fn probe_error_signature(error: &str) -> WarmUpSignature {
     if error.is_empty() {
         return WarmUpSignature::NonTls;
     }
-    // A non-2xx status IS an HTTP-layer answer — the service is up and
+    // A non-2xx status IS an HTTP-layer answer - the service is up and
     // speaking TLS but broken; a warm-up grace must NEVER mask it.
     if error.starts_with("non-2xx status") {
         return WarmUpSignature::NonTls;
@@ -778,7 +778,7 @@ fn spawn_rollup_metrics_subscriber(
                         // Error/warning counts from Stat's rollups are
                         // **snapshots** (rolling 24-hour aggregates), not
                         // deltas. Overwrite the stored value instead of
-                        // accumulating — otherwise the count climbs every
+                        // accumulating - otherwise the count climbs every
                         // 10s when stat republishes the same rollup.
                         if *errors > 0 || *warnings > 0 {
                             let _ = store::set_error_warning_counts(
@@ -803,7 +803,7 @@ fn spawn_rollup_metrics_subscriber(
 /// (`restarts`, `errors`, `warnings`) once per day at 00:00 UTC. This
 /// makes the `RST`/`ERR`/`WRN` columns in `make status` show a rolling
 /// 24-hour window instead of lifetime totals. `api_calls` is not reset
-/// here — it is overwritten every 10s from Stat's
+/// here - it is overwritten every 10s from Stat's
 /// `stat:rollups:day` channel, which already provides a true 24-hour
 /// aggregate.
 ///
@@ -860,7 +860,7 @@ fn spawn_daily_reset(conn: glide::GlideClient, config: CaptainConfig) {
 /// raised until the service reaches Active, which clears it through the
 /// regular monitor path). 0 disables. The respawn rides the same
 /// supervisor spawn path as any start (fresh registry row at a fresh
-/// port) — never a manual process launch.
+/// port) - never a manual process launch.
 fn spawn_last_resort_respawner(
     conn: glide::GlideClient,
     config: CaptainConfig,
@@ -906,8 +906,8 @@ fn spawn_last_resort_respawner(
                 // DUPROW-1 (DESIGN §5.10.2, "check the live process, not
                 // just the row"): no live row ≠ no live process. A row-less
                 // orphan (its row deleted by an earlier give-up while it
-                // kept serving) is ADOPTED — registry row re-created at its
-                // live port — instead of spawning a duplicate instance.
+                // kept serving) is ADOPTED - registry row re-created at its
+                // live port - instead of spawning a duplicate instance.
                 let expected_binary = crate::server::expected_binary_for(
                     &alert.service_type,
                     Some(&entry),
@@ -947,7 +947,7 @@ fn spawn_last_resort_respawner(
                             service = %alert.service_type,
                             port,
                             pid,
-                            "captain: last-resort respawn found a live row-less instance — adopted, no duplicate spawned"
+                            "captain: last-resort respawn found a live row-less instance - adopted, no duplicate spawned"
                         );
                     }
                     continue;

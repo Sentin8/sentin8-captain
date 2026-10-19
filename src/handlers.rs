@@ -23,15 +23,15 @@ use crate::store;
 pub struct AppState {
     /// The config.
     pub config: Arc<CaptainConfig>,
-    /// Shield engine (Phase — ): step 5 gates every
-    /// control endpoint. Captain has no tenant realm of its own — the
+    /// Shield engine (Phase - ): step 5 gates every
+    /// control endpoint. Captain has no tenant realm of its own - the
     /// scope-mirror permit is platform-admin keyed.
     /// The policy.
     pub policy: std::sync::Arc<crate::policy::Engine>,
     /// Shared Sentin8:Policy admin surface.
     /// The admin.
     pub admin: sentin8::shield::admin::SharedAdminState,
-    /// Hot-reloadable service catalog — can be updated at runtime via
+    /// Hot-reloadable service catalog - can be updated at runtime via
     /// `POST /v1/captain/add-catalog` without restarting captain.
     /// Initialized from `config.catalog` at startup; new entries are
     /// merged in via `add_catalog`.
@@ -43,7 +43,7 @@ pub struct AppState {
     pub shutdown_tx: watch::Sender<bool>,
 }
 
-/// Step 5 — Shield decides. Captain's control endpoints are
+/// Step 5 - Shield decides. Captain's control endpoints are
 /// platform-operations surfaces: the enforced scope-mirror permit keys on
 /// `sentin8:captain:admin` (granted to platform admins via the sys role
 /// nesting). No token → 401; deny → 403.
@@ -53,10 +53,10 @@ pub struct AppState {
 /// the accept loop injected the kernel-proven `SO_PEERCRED` uid ONLY after
 /// confirming root or socket-owner (unauthorized peers never reach the
 /// router; the TCP listener strips client-supplied copies). Presence of
-/// the header therefore *is* the authorization — no Bearer token needed.
+/// the header therefore *is* the authorization - no Bearer token needed.
 ///
 /// `pub(crate)` so the admin-UI surface (`crate::admin_ui`) reuses the same
-/// gate — the RFW pages expose the same approve action the HTTP API does
+/// gate - the RFW pages expose the same approve action the HTTP API does
 /// and must not be a weaker path.
 pub(crate) async fn require_captain_policy(
     state: &AppState,
@@ -86,12 +86,12 @@ pub(crate) async fn require_captain_policy(
     Ok(())
 }
 
-/// Step 5 for the remote-spawn surface (FLEET-4, DESIGN §11.4) — the same
+/// Step 5 for the remote-spawn surface (FLEET-4, DESIGN §11.4) - the same
 /// 8-step pipeline, a DIFFERENT action: the M2M `captain-remote` workload
 /// presents the granular `sentin8:captain:instances:write` scope, so the
 /// Shield evaluation targets that action, not the operator
 /// `sentin8:captain:admin` one. The operator path (a human bearer with the
-/// admin scope) is also admitted — the CLI uses it to place services by
+/// admin scope) is also admitted - the CLI uses it to place services by
 /// hand. No token → 401; neither scope → 403.
 pub(crate) async fn require_instances_write(
     state: &AppState,
@@ -111,7 +111,7 @@ pub(crate) async fn require_instances_write(
         // The granular remote-spawn scope admitted the call.
         Ok(_) => Ok(()),
         // 403 on the granular action: the caller may still hold the
-        // operator admin scope (a human placing services) — retry the
+        // operator admin scope (a human placing services) - retry the
         // standard gate before refusing.
         Err(err @ (axum::http::StatusCode::FORBIDDEN, _)) => {
             if a.has_scope("sentin8:captain:admin") {
@@ -142,7 +142,7 @@ pub async fn health(State(_state): State<AppState>) -> Json<serde_json::Value> {
     )
 }
 
-/// POST /v1/captain/shutdown — trigger a full graceful shutdown.
+/// POST /v1/captain/shutdown - trigger a full graceful shutdown.
 /// Stops all managed services, releases the advisory lock, and exits.
 /// This is the proper way to bring down the platform (used by `sentin8 captain stop`).
 /// Handle shutdown.
@@ -162,7 +162,7 @@ pub async fn shutdown(
     Ok(Json(serde_json::json!({"status": "shutting_down"})))
 }
 
-/// GET /v1/captain/upgrade-status/{key} — poll the phase of a rolling upgrade.
+/// GET /v1/captain/upgrade-status/{key} - poll the phase of a rolling upgrade.
 /// Returns the current phase, or 404 if no upgrade is in progress.
 /// Handle upgrade status.
 pub async fn upgrade_status(
@@ -192,12 +192,12 @@ pub async fn upgrade_status(
     }
 }
 
-/// GET /v1/captain/upgrade-stream/{key} — SSE stream of upgrade progress.
+/// GET /v1/captain/upgrade-stream/{key} - SSE stream of upgrade progress.
 /// Polls Valkey every 2s and streams each phase update as an SSE event.
 /// Closes when the upgrade reaches a terminal phase (complete, aborted, rolled_back)
 /// or after 10 minutes with no update.
 ///
-/// Shield-gated like every management surface — the gate runs before the
+/// Shield-gated like every management surface - the gate runs before the
 /// stream opens, so a rejected request never holds a stream.
 /// Handle upgrade stream.
 pub async fn upgrade_stream(
@@ -243,7 +243,7 @@ pub async fn upgrade_stream(
                        }
                    }
                    None => {
-    // Key expired or not yet written — if we never saw data and 30s passed, 404.
+    // Key expired or not yet written - if we never saw data and 30s passed, 404.
                        if last_payload.is_none() && last_seen.elapsed().as_secs() > 30 {
                            yield Ok(axum::response::sse::Event::default()
                                .event("error")
@@ -266,7 +266,7 @@ pub async fn upgrade_stream(
     Ok(axum::response::sse::Sse::new(stream))
 }
 
-/// GET /v1/captain/startup-stream — SSE stream of startup progress.
+/// GET /v1/captain/startup-stream - SSE stream of startup progress.
 ///
 /// Polls the service registry every 2s and streams readiness updates:
 /// - event "progress": `{"ready_count": N, "total": M, "pending": [...], "alerts": [...]}`
@@ -277,7 +277,7 @@ pub async fn upgrade_stream(
 /// Closes when all catalog services have enough Active instances, or
 /// after 5 minutes with no progress.
 ///
-/// Shield-gated like every management surface — the gate runs before the
+/// Shield-gated like every management surface - the gate runs before the
 /// stream opens, so a rejected request never holds a stream. Note the CLI
 /// (`stream_startup`, invoked right after spawning captain) calls this
 /// best-effort: without an operator token it prints a hint and moves on;
@@ -334,7 +334,7 @@ pub async fn startup_stream(
                    let ready_count = total - pending.len();
                    let ready = pending.is_empty();
 
-    // WARN-10: crash-looped services surface as FIRST-CLASS alerts — the
+    // WARN-10: crash-looped services surface as FIRST-CLASS alerts - the
     // CLI prints them and the operator sees WHICH service gave up and where
     // to look, instead of a silent 'waiting on' loop that ends in timeout.
                    let alerts = store::list_alerts(&conn).await.unwrap_or_default();
@@ -406,7 +406,7 @@ pub async fn startup_stream(
                        yield Ok::<_, std::convert::Infallible>(
                            axum::response::sse::Event::default()
                                .event("timeout")
-                               .data("startup stalled — no progress for 5 minutes"),
+                               .data("startup stalled - no progress for 5 minutes"),
                        );
                        break;
                    }
@@ -418,7 +418,7 @@ pub async fn startup_stream(
     Ok(axum::response::sse::Sse::new(stream))
 }
 
-/// GET /v1/captain/shutdown-stream — SSE stream of shutdown progress.
+/// GET /v1/captain/shutdown-stream - SSE stream of shutdown progress.
 ///
 /// Polls the service registry every 2s and streams the number of
 /// remaining Active/Starting/Stopping instances until all are
@@ -428,7 +428,7 @@ pub async fn startup_stream(
 /// - event "done": `[done]` (all stopped)
 /// - event "timeout": stream closes after 2 minutes
 ///
-/// Shield-gated like every management surface — the gate runs before the
+/// Shield-gated like every management surface - the gate runs before the
 /// stream opens. The CLI consumes this best-effort and has its own
 /// SIGKILL deadline, so a rejection degrades to a missing progress feed,
 /// not a broken shutdown.
@@ -503,7 +503,7 @@ pub async fn shutdown_stream(
                    yield Ok::<_, std::convert::Infallible>(
                        axum::response::sse::Event::default()
                            .event("timeout")
-                           .data("shutdown timed out — some services did not stop"),
+                           .data("shutdown timed out - some services did not stop"),
                    );
                    break;
                }
@@ -542,7 +542,7 @@ pub async fn list_services(
     Ok(Json(filtered))
 }
 
-/// GET /v1/captain/machines — returns per-machine host-level CPU% and MEM%
+/// GET /v1/captain/machines - returns per-machine host-level CPU% and MEM%
 /// from the monitor's periodic `/proc` sampling. One entry per IP.
 ///
 /// Each entry: `{ "ip": "172.x.x.x", "cpu_pct": , "mem_pct": , "used_mb": , "ts": 1692912345 }`
@@ -575,7 +575,7 @@ pub async fn list_machines(
             "mem_pct": parsed.get("mem_pct").and_then(|v| v.as_f64()).unwrap_or(0.0),
             "used_mb": parsed.get("used_mb").and_then(|v| v.as_f64()).unwrap_or(0.0),
             "ts": parsed.get("ts").and_then(|v| v.as_i64()).unwrap_or(0),
- // Saturation annotation (PROVISION-1, design ) — read by
+ // Saturation annotation (PROVISION-1, design ) - read by
  // the autoscaler role and surfaced to operators here.
             "saturated": parsed.get("saturated").and_then(|v| v.as_bool()).unwrap_or(false),
             "saturated_service": parsed.get("saturated_service").and_then(|v| v.as_str()).unwrap_or(""),
@@ -646,7 +646,7 @@ pub async fn service_action(
     // SELFUP- : EVERY
     // per-instance action on the captain row targets the supervisor itself.
     // `restart` SIGTERMs captain's own pid (the control plane died while
-    // its children survived reparented) and `stop` would do the same — the
+    // its children survived reparented) and `stop` would do the same - the
     // monitor loop cannot self-heal a dead supervisor. The supervisor can
     // never replace or terminate its own process; binary updates and
     // control-plane restarts go through `sentin8-cli captain restart`
@@ -659,7 +659,7 @@ pub async fn service_action(
     {
         return Err((
             axum::http::StatusCode::CONFLICT,
-            "cannot target the supervisor itself — captain would kill its own process \
+            "cannot target the supervisor itself - captain would kill its own process \
              with no successor (or spawn a second supervisor on the management port). \
              Use `sentin8-cli captain restart` instead."
                 .into(),
@@ -668,7 +668,7 @@ pub async fn service_action(
     // per-instance actions must resolve
     // the service entry against the LIVE catalog (startup catalog + entries
     // merged at runtime via merge-catalog during vertical enroll), not the
-    // startup-only catalog — a vertical's service types are unknown to
+    // startup-only catalog - a vertical's service types are unknown to
     // start_services' live view but missing here otherwise, which made
     // stop/start/upgrade 404 `service not in catalog`. The live catalog is a
     // superset of the startup catalog (merge-catalog only adds/overwrites),
@@ -710,7 +710,7 @@ pub async fn service_action(
         "start" => {
             // Spawn on the existing instance's port. Same-key respawn: the
             // prior row's restart count carries over (captain DESIGN §8
-            // invariant 10) — a manual start after kills must not reset the
+            // invariant 10) - a manual start after kills must not reset the
             // consecutive-restart bookkeeping.
             let _ = crate::supervisor::spawn(
                 &state.conn.clone(),
@@ -724,10 +724,10 @@ pub async fn service_action(
             Ok(Json(serde_json::json!({"action": "start", "key": key})))
         }
         "upgrade" => {
-            // Rolling upgrade (zero-downtime with rollback) — runs in a
+            // Rolling upgrade (zero-downtime with rollback) - runs in a
             // background task so the API returns immediately and captain
             // can continue serving other requests. (The captain-key case
-            // is refused above — SELFUP-1.1/1.3.)
+            // is refused above - SELFUP-1.1/1.3.)
             let conn = state.conn.clone();
             let config = state.config.clone();
             let inst = inst.clone();
@@ -769,7 +769,7 @@ pub async fn service_action(
     }
 }
 
-/// Background upgrade task — runs the full rolling upgrade flow
+/// Background upgrade task - runs the full rolling upgrade flow
 /// without blocking the API. Captain continues serving requests normally.
 async fn run_upgrade(
     conn: glide::GlideClient,
@@ -784,13 +784,13 @@ async fn run_upgrade(
 
     // Helper: write progress to Valkey under BOTH the request key (the OLD
     // instance's `{ip}:{port}`) and the NEW instance's key
-    // (`captain:upgrade:new:{ip}:{new_port}`) — the monitor's self-heal guard
+    // (`captain:upgrade:new:{ip}:{new_port}`) - the monitor's self-heal guard
     // `is_upgrade_in_progress` checks the key of whichever row it samples,
     // so publishing under both identities is what shields the flapping new
     // instance for the whole run (captain DESIGN §8 invariant 9). Keys
     // expire with the 10-min TTL; on terminal phases they are deleted.
     // The new-instance key is only known after port selection (rolling
-    // path) — it is threaded through the calls below via `Some(&nk)`.
+    // path) - it is threaded through the calls below via `Some(&nk)`.
 
     async fn write_progress(
         conn: &glide::GlideClient,
@@ -830,7 +830,7 @@ async fn run_upgrade(
     // Helper: delete BOTH progress keys. Terminal phases (aborted /
     // rolled_back / complete) must clear the guard IMMEDIATELY: a monitor
     // health-kill AFTER a finished run (or an abort's row delete) must
-    // never be blocked by keys that would otherwise ride the 10-min TTL —
+    // never be blocked by keys that would otherwise ride the 10-min TTL -
     // a latched guard left the fleet unhealed for the whole TTL window
     // (captain DESIGN §8 invariant 9: the guard covers the RUN, not the
     // run plus ten minutes). The SSE/CLI still read the terminal phase
@@ -847,13 +847,13 @@ async fn run_upgrade(
 
     // ── Fixed-port services (e.g. proxy on 443, log on 8001) ──────────
     // A rolling upgrade (spawn new on a free port, drain old) doesn't work
-    // for fixed-port services — clients expect them on the well-known port.
+    // for fixed-port services - clients expect them on the well-known port.
     // Instead: stop the old instance first, then spawn the new one on the
     // same fixed port and wait for it to become Active. This is a brief
     // downtime (a few seconds) but is the only correct approach for a
     // service that must listen on a specific port.
     if entry.fixed_port > 0 || entry.upgrade_stop_first {
-        tracing::info!(service = %service_type, port = old_port, "upgrade: stop-first service — stopping old instance first");
+        tracing::info!(service = %service_type, port = old_port, "upgrade: stop-first service - stopping old instance first");
 
         // 1. Stop the old instance.
         let old_pid = inst.pid;
@@ -894,7 +894,7 @@ async fn run_upgrade(
         let new_pid = match crate::supervisor::spawn(&conn, inst, entry, old_port, None).await {
             Ok(pid) => pid,
             Err(e) => {
-                tracing::error!(service = %service_type, error = %e, "upgrade: failed to spawn new instance — aborting");
+                tracing::error!(service = %service_type, error = %e, "upgrade: failed to spawn new instance - aborting");
                 write_progress(
                     &conn,
                     &upgrade_key,
@@ -941,7 +941,7 @@ async fn run_upgrade(
         }
 
         if !new_active {
-            tracing::warn!(service = %service_type, port = old_port, "upgrade: did not become Active — aborting");
+            tracing::warn!(service = %service_type, port = old_port, "upgrade: did not become Active - aborting");
             write_progress(
                 &conn,
                 &upgrade_key,
@@ -979,7 +979,7 @@ async fn run_upgrade(
                 .find(|i| i.local_port == old_port && i.pid == new_pid)
             {
                 if new_inst.status != "Active" {
-                    tracing::warn!(service = %service_type, port = old_port, "upgrade: lost Active during stability check — aborting");
+                    tracing::warn!(service = %service_type, port = old_port, "upgrade: lost Active during stability check - aborting");
                     write_progress(
                         &conn,
                         &upgrade_key,
@@ -1001,7 +1001,7 @@ async fn run_upgrade(
         }
 
         if !stable {
-            tracing::warn!(service = %service_type, port = old_port, "upgrade: not stable after 60s — aborting");
+            tracing::warn!(service = %service_type, port = old_port, "upgrade: not stable after 60s - aborting");
             write_progress(
                 &conn,
                 &upgrade_key,
@@ -1044,7 +1044,7 @@ async fn run_upgrade(
     {
         Some(p) => p,
         None => {
-            tracing::error!(service = %service_type, "upgrade: no free ports available — aborting");
+            tracing::error!(service = %service_type, "upgrade: no free ports available - aborting");
             return;
         }
     };
@@ -1054,15 +1054,15 @@ async fn run_upgrade(
         Ok(pid) => pid,
         Err(e) => {
             crate::scaler::release_reserved_port(&conn, &local_ip, next_port).await;
-            tracing::error!(service = %service_type, error = %e, "upgrade: failed to spawn new instance — aborting");
+            tracing::error!(service = %service_type, error = %e, "upgrade: failed to spawn new instance - aborting");
             return;
         }
     };
-    // Reservation stays HELD here — the registry row alone does not stop a
+    // Reservation stays HELD here - the registry row alone does not stop a
     // stale parallel scan from re-acquiring the port until the child has
     // actually bound it (captain DESIGN §8 invariant 9). Released after the
     // Active-wait (success) and on every abort path below.
-    // The NEW instance's progress key rides the new port — the monitor
+    // The NEW instance's progress key rides the new port - the monitor
     // samples the new row by its own (`{ip}:{port}`) key.
     let new_instance_key = format!("new:{local_ip}:{next_port}");
     tracing::info!(service = %service_type, old_port, new_port = next_port, new_pid, "upgrade: new instance spawned");
@@ -1078,7 +1078,7 @@ async fn run_upgrade(
     .await;
 
     // Helper: fetch THE upgraded instance from Valkey. Rows are matched on
-    // `service_type` + `local_port` (`+ pid` where the caller has it) —
+    // `service_type` + `local_port` (`+ pid` where the caller has it) -
     // NEVER on port alone: during a botched window several services can
     // hold rows for the same port, and a port-only match polls/deletes
     // another service's instance (captain DESIGN §8 invariant 9).
@@ -1098,7 +1098,7 @@ async fn run_upgrade(
     }
 
     // Helper: stop and remove the new instance (abort cleanup). The abort
-    // path skips the drain (drain_s = 0) — the new instance never served
+    // path skips the drain (drain_s = 0) - the new instance never served
     // traffic, so there is nothing to drain.
     async fn stop_new(
         conn: &glide::GlideClient,
@@ -1117,7 +1117,7 @@ async fn run_upgrade(
         }
     }
 
-    // Catalog entry fallback for abort cleanup — the upgrade flow knows its
+    // Catalog entry fallback for abort cleanup - the upgrade flow knows its
     // entry, but the nested `stop_new` helper is called from branches where
     // only the instance is handy. A default entry (0 offset, HTTPS) matches
     // every normal shell service; gauge-less probing just falls back to the
@@ -1157,7 +1157,7 @@ async fn run_upgrade(
     }
 
     if !new_active {
-        tracing::warn!(service = %service_type, new_port = next_port, "upgrade: did not become Active — aborting, keeping old instance");
+        tracing::warn!(service = %service_type, new_port = next_port, "upgrade: did not become Active - aborting, keeping old instance");
         crate::scaler::release_reserved_port(&conn, &local_ip, next_port).await;
         stop_new(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await;
         write_progress(
@@ -1183,7 +1183,7 @@ async fn run_upgrade(
         Some(&new_instance_key),
     )
     .await;
-    // The child is Active — its process holds the port; the reservation's
+    // The child is Active - its process holds the port; the reservation's
     // job (surviving the unbound window between selection and first bind) is
     // done. Later aborts (stability/rollback) keep the registry row as the
     // port guard for stop_new's own cleanup.
@@ -1194,7 +1194,7 @@ async fn run_upgrade(
         "upgrade: port reservation released (child Active, process holds the port)"
     );
 
-    // 3. Wait for stability (no restarts/errors for 60s) — old instance still serving.
+    // 3. Wait for stability (no restarts/errors for 60s) - old instance still serving.
     let stability_deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
     let mut last_restarts = -1i32;
     let mut stable = false;
@@ -1204,7 +1204,7 @@ async fn run_upgrade(
             get_new_inst(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await
         {
             if new_inst.status != "Active" {
-                tracing::warn!(service = %service_type, new_port = next_port, "upgrade: lost Active during stability check — aborting");
+                tracing::warn!(service = %service_type, new_port = next_port, "upgrade: lost Active during stability check - aborting");
                 stop_new(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await;
                 write_progress(
                     &conn,
@@ -1228,7 +1228,7 @@ async fn run_upgrade(
     }
 
     if !stable {
-        tracing::warn!(service = %service_type, new_port = next_port, "upgrade: not stable after 60s — aborting");
+        tracing::warn!(service = %service_type, new_port = next_port, "upgrade: not stable after 60s - aborting");
         stop_new(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await;
         write_progress(
             &conn,
@@ -1255,7 +1255,7 @@ async fn run_upgrade(
     )
     .await;
 
-    // 4. Mark the old instance as Inactive (drain — stop new traffic).
+    // 4. Mark the old instance as Inactive (drain - stop new traffic).
     let _ = store::mark_inactive(&conn, inst).await;
     tracing::info!(service = %service_type, old_port, "upgrade: old instance set to Inactive (draining)");
     write_progress(
@@ -1269,7 +1269,7 @@ async fn run_upgrade(
     )
     .await;
 
-    // 5. Wait for stability under load (60s) — new instance is now serving all traffic.
+    // 5. Wait for stability under load (60s) - new instance is now serving all traffic.
     let load_deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
     let mut last_restarts = -1i32;
     let mut stable_under_load = false;
@@ -1279,7 +1279,7 @@ async fn run_upgrade(
             get_new_inst(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await
         {
             if new_inst.status != "Active" {
-                tracing::warn!(service = %service_type, new_port = next_port, "upgrade: lost Active under load — rolling back");
+                tracing::warn!(service = %service_type, new_port = next_port, "upgrade: lost Active under load - rolling back");
                 let _ = store::mark_active(&conn, inst).await;
                 stop_new(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await;
                 tracing::info!(service = %service_type, old_port, "upgrade: old instance reactivated (rollback)");
@@ -1305,7 +1305,7 @@ async fn run_upgrade(
     }
 
     if !stable_under_load {
-        tracing::warn!(service = %service_type, new_port = next_port, "upgrade: not stable under load — rolling back");
+        tracing::warn!(service = %service_type, new_port = next_port, "upgrade: not stable under load - rolling back");
         let _ = store::mark_active(&conn, inst).await;
         stop_new(&conn, &local_ip, &service_type, next_port, Some(new_pid)).await;
         tracing::info!(service = %service_type, old_port, "upgrade: old instance reactivated (rollback)");
@@ -1346,13 +1346,13 @@ async fn run_upgrade(
             config.upgrade_drain_s,
         )
         .await;
-        tracing::info!(service = %service_type, old_port, "upgrade: old instance stopped — upgrade complete");
+        tracing::info!(service = %service_type, old_port, "upgrade: old instance stopped - upgrade complete");
     }
 
     // 7. Update captain's own env var for this service type so future
     // spawns propagate the new port. Services that use
     // sentin8::service_discovery will pick up the new instance
-    // automatically via Valkey pub/sub — no restart needed.
+    // automatically via Valkey pub/sub - no restart needed.
     let port_env = format!("{}_PORT", service_type.to_uppercase());
     if !service_type.contains(':') {
         std::env::set_var(&port_env, next_port.to_string());
@@ -1380,7 +1380,7 @@ async fn run_upgrade(
 /// bare key is ambiguous. A unique match resolves; zero matches are a
 /// NotFound error; multiple services (or multiple pids of one service)
 /// on the same key are an Ambiguous error listing the conflicting rows
-/// — the operator must clean up before the action can target anything.
+/// - the operator must clean up before the action can target anything.
 enum KeyResolution {
     /// Exactly one instance for the key.
     // Boxed: the instance record (~300 B of strings) dwarfs the message
@@ -1413,7 +1413,7 @@ async fn resolve_instance(
                 .collect::<Vec<_>>()
                 .join(", ");
             Ok(KeyResolution::Ambiguous(format!(
-                "key {key} is ambiguous — {} registry rows share it; remove the stale rows first (services on this key: {listing})",
+                "key {key} is ambiguous - {} registry rows share it; remove the stale rows first (services on this key: {listing})",
                 matches.len()
             )))
         }
@@ -1432,12 +1432,12 @@ pub async fn list_catalog(
     Ok(Json(entries))
 }
 
-/// `GET /v1/captain/alerts` — the crash-loop (give-up) alert list
+/// `GET /v1/captain/alerts` - the crash-loop (give-up) alert list
 /// (WARN-10): every service captain gave up on after MAX_RESTARTS and
 /// has not yet recovered. Consumed by `captain services` (the
 /// "manual intervention required" list printed after the instance
 /// table) and by the RFW surfaces. The alert record is cleared
-/// automatically when a (re)spawned instance reaches `Active` — this
+/// automatically when a (re)spawned instance reaches `Active` - this
 /// endpoint always reflects the CURRENT give-up set, never history.
 pub async fn list_alerts(
     State(state): State<AppState>,
@@ -1467,9 +1467,9 @@ pub async fn list_alerts(
     Ok(Json(values))
 }
 
-/// POST /v1/captain/add-catalog — hot-add an external service catalog.
+/// POST /v1/captain/add-catalog - hot-add an external service catalog.
 ///
-/// POST /v1/captain/merge-catalog — merge catalog entries into the live catalog.
+/// POST /v1/captain/merge-catalog - merge catalog entries into the live catalog.
 ///
 /// Takes catalog entries inline (no file). Used by `vertical enroll` when
 /// captain is already running. Entries already have resolved binary_path.
@@ -1478,7 +1478,7 @@ pub async fn list_alerts(
 #[derive(Deserialize)]
 /// Request body for mergecatalog.
 pub struct MergeCatalogRequest {
-    /// The entries — raw JSON so merge can distinguish "field absent"
+    /// The entries - raw JSON so merge can distinguish "field absent"
     /// (keep the existing entry's value) from "field declared" (overwrite).
     /// A registry JSON that does not mention probe mode / ports must not
     /// flatten captain's per-service defaults (the proxy kill-loop incident:
@@ -1495,7 +1495,7 @@ pub async fn merge_catalog(
     Json(req): Json<MergeCatalogRequest>,
 ) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
     // RCE boundary : entries carry a resolved `binary_path`
-    // that a later `start-services` spawn will execute — this endpoint must
+    // that a later `start-services` spawn will execute - this endpoint must
     // never be callable without passing the Shield `sentin8:captain:admin`
     // gate.
     require_captain_policy(&state, &headers).await?;
@@ -1515,13 +1515,13 @@ pub async fn merge_catalog(
             let declared = match serde_json::from_value::<ServiceCatalogEntry>(raw.clone()) {
                 Ok(e) => e,
                 Err(e) => {
-                    tracing::warn!(service = %service_type, error = %e, "merge-catalog: bad entry — skipping");
+                    tracing::warn!(service = %service_type, error = %e, "merge-catalog: bad entry - skipping");
                     continue;
                 }
             };
             let new_entry = match catalog.get(&service_type) {
                 // Existing entry (platform defaults or an earlier merge): only the
-                // fields the incoming JSON EXPLICITLY declares overwrite it — absent
+                // fields the incoming JSON EXPLICITLY declares overwrite it - absent
                 // fields keep the current values (serde defaults never flatten).
                 Some(existing) => {
                     let mut merged = existing.clone();
@@ -1536,7 +1536,7 @@ pub async fn merge_catalog(
                                     Ok(parsed) => *target = parsed,
                                     Err(e) => tracing::warn!(
                                         service = %service_type, field = key, error = %e,
-                                        "merge-catalog: bad field value — keeping existing"
+                                        "merge-catalog: bad field value - keeping existing"
                                     ),
                                 }
                             }
@@ -1597,7 +1597,7 @@ pub async fn merge_catalog(
     })))
 }
 
-/// POST /v1/captain/start-services — start specific services by type name.
+/// POST /v1/captain/start-services - start specific services by type name.
 ///
 /// Takes a list of service types. Finds them in the live catalog, spawns
 /// any that aren't already running.
@@ -1615,7 +1615,7 @@ pub struct StartServicesRequest {
 /// last-resort respawner): placement gate → port pick → spawn → register →
 /// publish. Returns the new port, or a human-readable skip reason.
 ///
-/// RCE boundary — callers already gate execution: the API site behind
+/// RCE boundary - callers already gate execution: the API site behind
 /// Shield `sentin8:captain:admin`; the respawner is captain-internal.
 pub(crate) async fn spawn_one_service(
     conn: &glide::GlideClient,
@@ -1625,7 +1625,7 @@ pub(crate) async fn spawn_one_service(
     entry: &ServiceCatalogEntry,
 ) -> Result<u16, String> {
     // Placement gate (FLEET-1, DESIGN §11.3): every spawn site consults the
-    // same seam — a refusal is a structured reject with the reason.
+    // same seam - a refusal is a structured reject with the reason.
     let all = store::list_all(conn)
         .await
         .map_err(|e| format!("valkey list-all: {e}"))?
@@ -1669,7 +1669,7 @@ pub(crate) async fn spawn_one_service(
             .map_err(|e| format!("valkey list-for-ip: {e}"))?;
         let used: std::collections::HashSet<u16> = instances.iter().map(|i| i.local_port).collect();
         let mut p = port_range.0;
-        // RESPAWNPORT-1: the registry's used-set alone is not enough —
+        // RESPAWNPORT-1: the registry's used-set alone is not enough -
         // a live listener outside the registry (a boot-loop orphan, a
         // fixed-port service the rows were deleted from) still holds the
         // port. The boot-spawn path checks `is_port_in_use`; this path
@@ -1735,7 +1735,7 @@ pub async fn start_services(
 ) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
     // RCE boundary : resolves service types through the live
     // catalog and executes their `binary_path` as captain children with the
-    // full inherited environment — always behind the Shield
+    // full inherited environment - always behind the Shield
     // `sentin8:captain:admin` gate.
     require_captain_policy(&state, &headers).await?;
 
@@ -1766,7 +1766,7 @@ pub async fn start_services(
                 None => {
                     tracing::warn!(
                         service = service_type,
-                        "start-services: not in catalog — skipping"
+                        "start-services: not in catalog - skipping"
                     );
                     continue;
                 }
@@ -1800,24 +1800,24 @@ pub async fn start_services(
     })))
 }
 
-/// `POST /v1/captain/instances` — the remote-spawn endpoint (FLEET-4,
+/// `POST /v1/captain/instances` - the remote-spawn endpoint (FLEET-4,
 /// DESIGN §11.4).
 ///
 /// This is the SAME spawn path as `/v1/captain/start-services` (the target
-/// resolves everything from its OWN catalog + operator env — the body
+/// resolves everything from its OWN catalog + operator env - the body
 /// carries service types only, no machine-controlled parameters cross the
 /// wire), behind a DIFFERENT authorization gate: the M2M `captain-remote`
 /// workload's granular `sentin8:captain:instances:write` scope, or the
 /// operator's `sentin8:captain:admin` for hand placement via the CLI.
 ///
-/// Placement gates apply identically — a leader calling this on machine
+/// Placement gates apply identically - a leader calling this on machine
 /// Y for a service pinned elsewhere gets the same structured 409 as a
 /// local operator would.
 #[derive(Deserialize)]
 /// Request body for remote instances.
 pub struct RemoteInstancesRequest {
     /// The service types to spawn on THIS machine (the target resolves
-    /// binary/ports/env from its own catalog — the wire carries no more
+    /// binary/ports/env from its own catalog - the wire carries no more
     /// than the types).
     pub service_types: Vec<String>,
 }
@@ -1900,7 +1900,7 @@ pub async fn readiness(
     }
 }
 
-/// GET /v1/captain/autoscaler — cluster-autoscaler role status.
+/// GET /v1/captain/autoscaler - cluster-autoscaler role status.
 ///
 /// Surfaces the profile, backend, fleet size, and the elected leader IP so
 /// operators can see the horizontal-scaling state without SSHing to machines.
@@ -1965,7 +1965,7 @@ pub async fn autoscaler_status(
     Ok(Json(body))
 }
 
-/// POST /v1/captain/autoscaler/approve — operator decision on a pending
+/// POST /v1/captain/autoscaler/approve - operator decision on a pending
 /// manual-profile request.
 ///
 /// Body: `{"kind": "provision"|"deprovision", "ip": "10.x.x.x", "decision": "approve"|"reject"}`

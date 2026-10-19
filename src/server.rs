@@ -18,7 +18,7 @@
 //! works while services are still starting).
 //!
 //! Shutdown: only `POST /v1/captain/shutdown` (called by `sentin8 captain stop`)
-//! triggers a full graceful shutdown — it stops all managed services,
+//! triggers a full graceful shutdown - it stops all managed services,
 //! releases the advisory lock, and exits. SIGTERM/SIGINT just exit the
 //! process immediately (services keep running, the lock auto-expires).
 
@@ -39,11 +39,11 @@ pub async fn serve(
     addr: String,
     _tls: sentin8::tls::Sentin8Tls,
 ) -> anyhow::Result<()> {
-    // ── 1. Connect to Valkey (Valkey certificate identity — group DESIGN.md
+    // ── 1. Connect to Valkey (Valkey certificate identity - group DESIGN.md
     // §3.1). The supervisor must boot even when the Valkey identity is
     // still minting (a fresh boot: acme is not up yet and the background
     // mint loop lands the pair seconds later) or when Valkey itself is
-    // down — BOTH the pair-read and the handshake retry here, and every
+    // down - BOTH the pair-read and the handshake retry here, and every
     // Valkey-touching path behind them degrades the same way.
     let conn = {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(600);
@@ -53,14 +53,14 @@ pub async fn serve(
                 Err(e) => {
                     tracing::warn!(
                         error = %e,
-                        "captain: Valkey identity/connection not ready at boot — \
+                        "captain: Valkey identity/connection not ready at boot - \
                          retrying (the supervisor must boot Valkey-down; the mint \
                          loop and the plane converge in the background)"
                     );
                 }
             }
             if std::time::Instant::now() > deadline {
-                anyhow::bail!("captain: Valkey unreachable for 10 minutes — giving up");
+                anyhow::bail!("captain: Valkey unreachable for 10 minutes - giving up");
             }
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
@@ -69,7 +69,7 @@ pub async fn serve(
     // ── 2. Acquire exclusivity (advisory lock via SETNX + PID file) ──
     if !store::try_advisory_lock(&conn, &config.local_ip).await? {
         anyhow::bail!(
-            "another captain is already running on this IP ({}) — advisory lock held",
+            "another captain is already running on this IP ({}) - advisory lock held",
             config.local_ip
         );
     }
@@ -126,7 +126,7 @@ pub async fn serve(
     }
 
     // ── 3. Bind the HTTP listener and start serving immediately ──────
-    // The API must be responsive right away — `sentin8 captain services`
+    // The API must be responsive right away - `sentin8 captain services`
     // should work even while services are still spawning.
     let local_ip = config.local_ip.clone();
     let shutdown_config = config.clone();
@@ -138,21 +138,21 @@ pub async fn serve(
     // ── Sentin8:Policy (Phase ): boot load refuses to start on invalid
     // policy text; hot-reload via the shared direct consumer; shared deps for
     // live identity resolution; stat emitter. Captain's own DB access is via
-    // the store's Valkey connection — the policy tables live in PG.
+    // the store's Valkey connection - the policy tables live in PG.
     // URL resolution matches the shell boot (SENTIN8_CAPTAIN_DATABASE_URL →
     // DATABASE_URL → default): a hardcoded `default_database_url` connected
     // as sentin8_app, whose RLS hides every policy row without a tenant
-    // context — the engine loaded 0 sets and denied everything fail-closed
+    // context - the engine loaded 0 sets and denied everything fail-closed
     // (COLD-START-1).
     let captain_db_url = std::env::var("SENTIN8_CAPTAIN_DATABASE_URL")
         .ok()
         .or_else(|| std::env::var("DATABASE_URL").ok())
         .unwrap_or_else(|| sentin8::config::Sentin8Config::default_database_url().to_string());
-    // ── Sentin8:Policy (— boot_full): captain is a
+    // ── Sentin8:Policy (- boot_full): captain is a
     // custom-boot binary (process supervisor, no shell serve), so it runs
-    // the ONE shared boot helper itself — same four steps the shell runs
+    // the ONE shared boot helper itself - same four steps the shell runs
     // for every other service (boot_full uses the boot-loader function
-    // policy design -r — so the COLD-START-1 RLS gap is closed here
+    // policy design -r - so the COLD-START-1 RLS gap is closed here
     // too: the sentin8_app role sees 0 rows without tenant context).
     let pg_pool = sentin8::config::pg_pool::connect(&captain_db_url).await?;
     let policy_engine = crate::policy::engine();
@@ -171,7 +171,7 @@ pub async fn serve(
             pool: pg_pool.clone(),
             policy: policy_engine.clone(),
             // The admin surface's auth client verifies operator Bearer tokens
-            // against Sentin8:Auth — it needs the platform issuer URL.
+            // against Sentin8:Auth - it needs the platform issuer URL.
             // `ClientOptions::default` carries an EMPTY base_url, which made
             // every token verification fail with a reqwest "builder error"
             // (COLD-START-1).
@@ -188,7 +188,7 @@ pub async fn serve(
         shutdown_tx,
     };
     // The TCP router consumes `state`; the UDS router needs its
-    // own clone — take it before the move below.
+    // own clone - take it before the move below.
     let state_for_uds = state.clone();
 
     // Clone live_catalog before state is moved into the router.
@@ -204,7 +204,7 @@ pub async fn serve(
             "/v1/captain/autoscaler/approve",
             post(handlers::autoscaler_approve),
         )
-        // Admin UI (RFW) — rendered by the dash at runtime. The
+        // Admin UI (RFW) - rendered by the dash at runtime. The
         // approve/reject row-action endpoints expose the same Shield-gated
         // decision path as the HTTP API.
         .route("/v1/admin/ui/{*page}", get(crate::admin_ui::get_admin_ui))
@@ -239,7 +239,7 @@ pub async fn serve(
         .route("/v1/captain/readiness", get(handlers::readiness))
         .route("/v1/captain/alerts", get(handlers::list_alerts))
         // Anti-spoofing : the kernel-proven local-peer header is
-        // injected only by the UDS accept loop — a client-supplied copy
+        // injected only by the UDS accept loop - a client-supplied copy
         // arriving over TCP is stripped before any handler sees it.
         .layer(axum::middleware::from_fn(local::strip_local_peer_header))
         .layer(axum::middleware::from_fn(
@@ -257,7 +257,7 @@ pub async fn serve(
     // ── 3b. Local control channel : the same router on a
     // Unix domain socket, authorized by kernel-proven peer credentials
     // (root or socket owner) instead of a Bearer token. The TCP listener
-    // above keeps the full Shield gate — the LAN RCE surface is
+    // above keeps the full Shield gate - the LAN RCE surface is
     // untouched. TLS-context middleware is deliberately NOT applied on
     // the UDS router: its X-Sentin8-* injection contract is TLS-specific
     // and a local peer presents no TLS context.
@@ -326,11 +326,11 @@ pub async fn serve(
 
     // ── 6. Serve until shutdown ───────────────────────────────────────
     // Captain serves plain HTTP (not via sentin8-tls) because it is the process
-    // supervisor — it must be reachable before any service's sentin8-tls can
+    // supervisor - it must be reachable before any service's sentin8-tls can
     // obtain certs from Acme. Proxy routes captain traffic directly.
     let listener = tokio::net::TcpListener::bind(&addr_clone).await?;
 
-    // Local UDS control channel task — serves the same router.
+    // Local UDS control channel task - serves the same router.
     if let (Some((uds_listener, socket_owner)), Some(local_app)) = (local_listener, local_router) {
         let local_shutdown = shutdown_rx.clone();
         tokio::spawn(async move {
@@ -362,14 +362,14 @@ pub async fn serve(
         tokio::pin!(sig);
         tokio::select! {
                    _ = &mut sig => {
-        // Signal — just exit, services keep running.
+        // Signal - just exit, services keep running.
         // Abort the server task and exit immediately.
                        server_handle.abort();
-                       tracing::info!("captain received signal — exiting (services keep running, lock will auto-expire)");
+                       tracing::info!("captain received signal - exiting (services keep running, lock will auto-expire)");
                        return Ok(());
                    }
                    _ = rx.changed() => {
-        // Shutdown endpoint — run full graceful shutdown below.
+        // Shutdown endpoint - run full graceful shutdown below.
         // The watch channel also fires the axum server's graceful
         // shutdown future, so it stops accepting new connections
         // while in-flight requests (like `make status`) drain.
@@ -378,12 +378,12 @@ pub async fn serve(
     }
 
     // ── Full graceful shutdown: stop all managed services ─────────
-    // The HTTP server is draining in-flight requests — `make status`
+    // The HTTP server is draining in-flight requests - `make status`
     // can query the status transitions while we stop services.
-    tracing::info!("captain shutdown requested via API — stopping all managed services");
+    tracing::info!("captain shutdown requested via API - stopping all managed services");
     crate::monitor::set_shutting_down();
     shutdown_all_services(&conn, &shutdown_config).await;
-    // Release the autoscaler leader lock — the 30s TTL would
+    // Release the autoscaler leader lock - the 30s TTL would
     // expire on its own, but releasing immediately lets another captain
     // take the provisioning role without waiting.
     crate::provision::shutdown_cleanup(&conn).await;
@@ -394,7 +394,7 @@ pub async fn serve(
     let _ = std::fs::remove_file(&pid_file);
     local::remove_local_socket();
 
-    // Remove the bootstrap enrollment credential — the enrollment
+    // Remove the bootstrap enrollment credential - the enrollment
     // channel is only alive while THIS captain process brokers it; the
     // next boot regenerates a fresh secret (the sealed at-rest file must
     // never outlive the fleet it was minted for).
@@ -453,7 +453,7 @@ async fn shutdown_all_services(conn: &glide::GlideClient, config: &CaptainConfig
     }
 
     // : Poll for exit every 500ms (up to 10s grace).
-    // Most services exit immediately on SIGTERM — no need to wait the
+    // Most services exit immediately on SIGTERM - no need to wait the
     // full grace period if they're all gone.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
@@ -497,7 +497,7 @@ struct SpawnedService {
 }
 
 /// Spawn all services and register each one in Valkey **immediately** after
-/// it spawns — not in a batch after all spawns complete. This way
+/// it spawns - not in a batch after all spawns complete. This way
 /// `sentin8 captain services` / `make status` shows instances progressively
 /// during the startup sequence (which can take 30+ seconds with spawn
 /// delays).
@@ -509,7 +509,7 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
     // duplicate beside the orphans (the prior sweep adoption was log-only).
 
     let mut used_ports: std::collections::HashSet<u16> = std::collections::HashSet::new();
-    // Adopted orphans hold their ports — the allocator must not hand them
+    // Adopted orphans hold their ports - the allocator must not hand them
     // to a fresh spawn, and their service types must not be spawned again.
     let adopted = reconcile_existing(conn, config).await.unwrap_or_default();
     for a in adopted.values() {
@@ -525,19 +525,19 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
     let sem = Arc::new(tokio::sync::Semaphore::new(config.start_concurrency.max(1)));
     let mut count = 0;
     let mut last_priority: Option<i16> = None;
-    // D6 (RS §3): instances spawned in the current tier — the tier gate
+    // D6 (RS §3): instances spawned in the current tier - the tier gate
     // waits for these to reach Active before the next tier starts.
     let mut tier_spawned: Vec<(String, u16)> = Vec::new();
 
     for (service_type, entry) in &entries {
-        // Skip captain itself — it's already running (this process).
+        // Skip captain itself - it's already running (this process).
         // The catalog entry exists only so the monitor loop samples
         // captain's own CPU/memory.
         if *service_type == "sentin8:captain" {
             continue;
         }
         // Boot-spawn allow-list (DESIGN §3 "Catalog and the boot-spawn
-        // filter"): `SENTIN8_SERVICES` gates ONLY this loop — the catalog
+        // filter"): `SENTIN8_SERVICES` gates ONLY this loop - the catalog
         // itself stays the full union, so /start-services and per-instance
         // actions can start pruned-at-boot types later without a captain
         // restart.
@@ -545,26 +545,26 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
             if !allow.contains(*service_type) {
                 tracing::info!(
                     service = %service_type,
-                    "boot spawn skipped — not in SENTIN8_SERVICES boot allow-list"
+                    "boot spawn skipped - not in SENTIN8_SERVICES boot allow-list"
                 );
                 continue;
             }
         }
         // SELFUP- : an adopted orphan already
-        // serves this type — spawning a second instance would duplicate it.
+        // serves this type - spawning a second instance would duplicate it.
         if let Some(a) = adopted.get(*service_type) {
             tracing::info!(
                 service = %service_type,
                 port = a.local_port,
                 pid = a.pid,
-                "skipping spawn — adopted orphaned instance already serving this type"
+                "skipping spawn - adopted orphaned instance already serving this type"
             );
             continue;
         }
-        // D6 (RS §3): tier boundary — HEALTH-GATED, not a flat 3s sleep.
+        // D6 (RS §3): tier boundary - HEALTH-GATED, not a flat 3s sleep.
         // Wait for every instance spawned in the previous tier to report
         // Active before starting the next tier (bounded by the gate
-        // timeout; on timeout warn + proceed — degraded old behavior,
+        // timeout; on timeout warn + proceed - degraded old behavior,
         // never a boot hang). Services are fail-open by design, so the
         // gate is a fast-path optimization, not a correctness crutch.
         if let Some(prev) = last_priority {
@@ -580,7 +580,7 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
 
         // Placement gate (FLEET-1, DESIGN §11.3): every spawn site consults
         // the same seam. At boot this is how machine B spawns its correct
-        // subset WITHOUT a per-machine SENTIN8_SERVICES list — a pin to
+        // subset WITHOUT a per-machine SENTIN8_SERVICES list - a pin to
         // another machine skips the spawn, an anti/singleton violation
         // skips with a warning. Failures here are skips, not boot errors:
         // the machine that owns the placement spawns it.
@@ -615,7 +615,7 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
                     placement = %entry_clone.placement,
                     reason = refusal.as_str(),
                     detail = refusal.reason(),
-                    "boot spawn skipped — placement gate refused this machine"
+                    "boot spawn skipped - placement gate refused this machine"
                 );
                 continue;
             }
@@ -626,7 +626,7 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
         // (They have no inbound traffic beyond the health probe.)
 
         // Fixed-port services (e.g. proxy on 443) always get their
-        // configured port — not auto-assigned from the global range.
+        // configured port - not auto-assigned from the global range.
         let port = if entry_clone.fixed_port > 0 {
             entry_clone.fixed_port
         } else {
@@ -639,7 +639,7 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
                 };
             }
             if p > config.port_range.1 {
-                tracing::warn!(service = service_type, "port range exhausted — skipping");
+                tracing::warn!(service = service_type, "port range exhausted - skipping");
                 continue;
             }
             p
@@ -648,7 +648,7 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
         // Adoption check: if the port is already in use (by a process
         // that's NOT us), check if it's the expected service binary
         // already running. This handles the case where the Makefile
-        // started log on 3199 before captain — captain should adopt it
+        // started log on 3199 before captain - captain should adopt it
         // rather than spawn a duplicate.
         if is_port_in_use(port) {
             if let Some(pid) = pid_on_port(port) {
@@ -671,12 +671,12 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
                     continue;
                 }
             }
-            // Port is in use by something else — skip to next free port.
+            // Port is in use by something else - skip to next free port.
             if entry_clone.fixed_port > 0 {
                 tracing::warn!(
                     service = %svc,
                     port,
-                    "fixed port is in use by another process — cannot adopt, will try to spawn anyway"
+                    "fixed port is in use by another process - cannot adopt, will try to spawn anyway"
                 );
             } else {
                 // For auto-assigned ports, find the next free one.
@@ -688,7 +688,7 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
                     };
                 }
                 if p > config.port_range.1 {
-                    tracing::warn!(service = service_type, "port range exhausted — skipping");
+                    tracing::warn!(service = service_type, "port range exhausted - skipping");
                     continue;
                 }
                 // Re-check adoption for the new port too.
@@ -778,13 +778,13 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
     tracing::info!(count, "all services spawned and registered in Valkey");
 }
 
-/// D6 (RS §3): health-gated tier boundary — wait for every instance
+/// D6 (RS §3): health-gated tier boundary - wait for every instance
 /// spawned in the previous tier to reach `Active` in the Valkey registry
 /// before the next tier starts. Bounded by
 /// `SENTIN8_CAPTAIN_TIER_GATE_TIMEOUT` (seconds, default 60); on timeout
 /// warn + proceed (degraded flat-sleep behavior, never a boot hang).
 /// Services are fail-open by design (outbox parks, DCR retries), so the
-/// gate is a fast-path optimization minimizing the parked-event window —
+/// gate is a fast-path optimization minimizing the parked-event window -
 /// not a correctness crutch.
 async fn wait_for_tier_active(
     conn: &glide::GlideClient,
@@ -802,7 +802,7 @@ async fn wait_for_tier_active(
     tracing::info!(
         services = tier_spawned.len(),
         timeout_secs,
-        "tier boundary — waiting for Active (health gate, D6)"
+        "tier boundary - waiting for Active (health gate, D6)"
     );
     let mut pending: Vec<(String, u16)> = tier_spawned.to_vec();
     while !pending.is_empty() && tokio::time::Instant::now() < deadline {
@@ -811,7 +811,7 @@ async fn wait_for_tier_active(
             // The registry is HASH-shaped: key `captain:svc:{service_type}`,
             // field `{ip}:{port}` (the exact shape upsert_instance writes).
             // A bare GET on the field string reads a never-existing string
-            // key and made this gate poll `nil` for its whole timeout —
+            // key and made this gate poll `nil` for its whole timeout -
             // every boot degraded to 5 × 60s of pure waiting (the D6 gate
             // never passed once). store::get_instance reads the RIGHT shape.
             let field = store::ServiceInstance::make_key(service_type, &config.local_ip, *port);
@@ -833,12 +833,12 @@ async fn wait_for_tier_active(
         }
     }
     if pending.is_empty() {
-        tracing::info!("tier gate passed — all tier instances Active");
+        tracing::info!("tier gate passed - all tier instances Active");
     } else {
         tracing::warn!(
             still_pending = pending.len(),
             timeout_secs,
-            "tier gate timeout — proceeding without all instances Active (D6 degraded mode)"
+            "tier gate timeout - proceeding without all instances Active (D6 degraded mode)"
         );
     }
 }
@@ -862,7 +862,7 @@ async fn register_spawned(conn: &glide::GlideClient, config: &CaptainConfig, svc
         status: "Starting".to_string(),
         restarts: 0,
         started_at: Some(chrono::Utc::now().timestamp()),
-        // CAPTAIN-10: seed EMPTY version/build — unknown until the first
+        // CAPTAIN-10: seed EMPTY version/build - unknown until the first
         // health probe (seeding captain's own pair made `make status` show a
         // duplicated `.` during the startup grace period).
         version: String::new(),
@@ -894,7 +894,7 @@ async fn register_spawned(conn: &glide::GlideClient, config: &CaptainConfig, svc
             }
         }
 
-        // When auth starts, no special env override is needed — services
+        // When auth starts, no special env override is needed - services
         // retry DCR until tls is ready to proxy the HTTPS call with
         // proper mTLS. The retry count has been increased to handle the
         // startup ordering (tls needs acme cert before it can proxy).
@@ -915,7 +915,7 @@ struct AdoptedInstance {
 /// Expected binary name for a service type. Catalog entries carry the
 /// authoritative name; when the type is NOT in the catalog (runtime-
 /// registered vertical services under a captain booted without
-/// --catalog-paths), derive it from the type itself — the vertical
+/// --catalog-paths), derive it from the type itself - the vertical
 /// convention is `{workspace}::{leaf}` crates producing binaries named
 /// without the workspace prefix (`bank8:ledger` → `bank8-ledger`).
 /// SELFUP-: a catalog-unknown type is adopt-eligible, never kill-eligible.
@@ -954,7 +954,7 @@ fn listen_port_of(pid: u32) -> Option<u16> {
     let mut ports: Vec<u16> = stdout
         .lines()
         .filter_map(|l| l.strip_prefix('n'))
-        // `n*:8003`, `n127.:8003`, `n[::]:8003` — the port follows the
+        // `n*:8003`, `n127.:8003`, `n[::]:8003` - the port follows the
         // LAST colon in every shape.
         .filter_map(|a| a.rsplit(':').next()?.parse::<u16>().ok())
         .collect();
@@ -966,7 +966,7 @@ fn listen_port_of(pid: u32) -> Option<u16> {
 /// and classify live orphans from a previous captain.
 ///
 /// SELFUP-1.2/1.4/ : returns the set of ADOPTED services
-/// — live orphan processes (not children of this captain) whose binary
+/// - live orphan processes (not children of this captain) whose binary
 /// matches the expected name for their service type. Their registry rows are
 /// kept/corrected (re-keyed when the recorded port no longer matches the
 /// process's actual listener) and the caller (start_and_register_all) MUST
@@ -975,7 +975,7 @@ fn listen_port_of(pid: u32) -> Option<u16> {
 /// Kill criteria are narrowed: the ONLY boot-time kill is a live orphan
 /// whose process provably runs a different binary than the service type
 /// expects (catalog name, or derived `{type with ':' → '-'}` when the type
-/// is not in the catalog — a captain booted without vertical catalog paths
+/// is not in the catalog - a captain booted without vertical catalog paths
 /// must never kill a healthy bank8/hotel8 service just because the type is
 /// unknown).
 async fn reconcile_existing(
@@ -988,7 +988,7 @@ async fn reconcile_existing(
     for inst in &existing {
         // DUPROW-1 (DESIGN §5.10.2): `Starting` rows are adoptable too.
         // A last-resort/self-heal spawn whose captain died before its
-        // monitor tick promoted the row is a LIVE orphan in `Starting` —
+        // monitor tick promoted the row is a LIVE orphan in `Starting` -
         // excluding it here left it invisible to adoption, and the boot
         // spawn loop then minted a duplicate instance for the type. All
         // live-pid, non-terminal rows are classified by the same
@@ -1034,17 +1034,17 @@ async fn reconcile_existing(
                         service = %inst.service_type,
                         pid,
                         expected = %expected_binary,
-                        "boot sweep: orphaned process runs a different binary than expected — \
+                        "boot sweep: orphaned process runs a different binary than expected - \
                          SIGTERM sent, registry row cleared"
                     );
                     continue;
                 }
                 // Adopt: correct the row's port to the AUTHORITY port
-                // when one exists (DUPROW-1 seam 5, DESIGN §5.10.2 —
+                // when one exists (DUPROW-1 seam 5, DESIGN §5.10.2 -
                 // the port-25 trap). Rule order:
                 // (a) catalog `fixed_port` + the process holds it →
                 //     re-key to the fixed port (the declared health
-                //     surface — a row parked on a protocol port like
+                //     surface - a row parked on a protocol port like
                 //     gate's SMTP 25 gets healed to 8103);
                 // (b) recorded port + the process holds it → TRUST the
                 //     recorded port (multi-listener services must not
@@ -1087,7 +1087,7 @@ async fn reconcile_existing(
                         pid,
                         old_port = inst.local_port,
                         port = actual_port,
-                        "boot sweep: adopted orphaned service — registry port corrected"
+                        "boot sweep: adopted orphaned service - registry port corrected"
                     );
                     adopted.insert(
                         inst.service_type.clone(),
@@ -1119,17 +1119,17 @@ async fn reconcile_existing(
 
 /// Is `pid` a direct child of THIS captain process? Orphans from a dead
 /// captain are reparented (PPID = 1 or another ancestor), so a live PPID
-/// mismatch identifies them. Best-effort — a read failure conservatively
+/// mismatch identifies them. Best-effort - a read failure conservatively
 /// reports "ours" (never kills a process we can't classify).
 fn is_our_child(pid: u32) -> bool {
     match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
         Ok(stat) => {
-            // The comm field can contain spaces — parse after the last ')'.
+            // The comm field can contain spaces - parse after the last ')'.
             match stat.rsplit_once(')') {
                 Some((_comm, _rest)) => {
                     let mut fields =
                         stat[stat.find(") ").map(|i| i + 2).unwrap_or(0)..].split_whitespace();
-                    // fields: state(1) ppid(2) — offset after state.
+                    // fields: state(1) ppid(2) - offset after state.
                     let _state = fields.next();
                     fields
                         .next()
@@ -1144,12 +1144,12 @@ fn is_our_child(pid: u32) -> bool {
     }
 }
 
-/// Check if a TCP port is already in use. (Public — the scaler also uses
+/// Check if a TCP port is already in use. (Public - the scaler also uses
 /// this to find a free port when scaling up.)
 /// Handle is port in use.
 pub fn is_port_in_use(port: u16) -> bool {
     // Check on.0 (all interfaces) since services bind on all
-    // interfaces — a port taken on any interface is unavailable.
+    // interfaces - a port taken on any interface is unavailable.
     std::net::TcpListener::bind(("0.0.0.0", port)).is_err()
 }
 
@@ -1179,7 +1179,7 @@ pub(crate) fn pid_on_port(port: u16) -> Option<u32> {
 /// DUPROW-1 seam 5 helper (DESIGN §5.10.2): does the recorded port hold
 /// a listener owned by THIS process (pid) running the expected binary?
 /// A `true` result means the recorded port is one of the process's own
-/// listeners — the boot sweep must NOT re-key the row away from it.
+/// listeners - the boot sweep must NOT re-key the row away from it.
 pub(crate) fn server_pid_on_port_or_expected(
     port: u16,
     expected_binary: &str,
@@ -1197,7 +1197,7 @@ pub(crate) fn server_pid_on_port_or_expected(
 /// expected binary. Used by the last-resort respawner when the registry
 /// shows no live row: a row-less live process is ADOPTED (row re-created)
 /// instead of duplicated by a fresh spawn. The scan is bounded by the
-/// port range and each probe is a single `lsof` call — it runs at most
+/// port range and each probe is a single `lsof` call - it runs at most
 /// once per `last_resort_respawn_s` per alerted service.
 pub(crate) fn find_rowless_live_service(
     _service_type: &str,
