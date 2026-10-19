@@ -112,9 +112,7 @@ pub async fn get_admin_ui(
             ));
         }
     };
-    Ok(Json(
-        serde_json::to_value(AdminUiResponse::page(def)).unwrap(),
-    ))
+    Ok(Json(AdminUiResponse::page(def)))
 }
 
 /// `GET /v1/admin/{resource}` - data rows for the admin UI tables.
