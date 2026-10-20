@@ -507,9 +507,9 @@ pub async fn self_heal(
     let siblings = store::list_for_ip(conn, &killed.local_ip)
         .await
         .unwrap_or_default();
-    let live_sibling = siblings.iter().any(|s| {
-        s.key != killed.key && s.service_type == killed.service_type && s.pid != 0
-    });
+    let live_sibling = siblings
+        .iter()
+        .any(|s| s.key != killed.key && s.service_type == killed.service_type && s.pid != 0);
     if live_sibling {
         tracing::warn!(
             service = %killed.service_type,

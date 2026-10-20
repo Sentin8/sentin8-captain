@@ -994,10 +994,7 @@ async fn reconcile_existing(
         // live-pid, non-terminal rows are classified by the same
         // binary-identity rule; a `Starting` row with a DEAD pid falls
         // through to the crash-reconcile (Killed + deleted) below.
-        if inst.status == "Started"
-            || inst.status == "Active"
-            || inst.status == "Starting"
-        {
+        if inst.status == "Started" || inst.status == "Active" || inst.status == "Starting" {
             let pid = inst.pid;
             if pid != 0 && !crate::procfs::pid_alive(pid) {
                 let _ = store::mark_killed(conn, inst).await;
@@ -1063,11 +1060,8 @@ async fn reconcile_existing(
                     }
                 }
                 if actual_port == inst.local_port {
-                    let recorded_port_serves = server_pid_on_port_or_expected(
-                        inst.local_port,
-                        &expected_binary,
-                        pid,
-                    );
+                    let recorded_port_serves =
+                        server_pid_on_port_or_expected(inst.local_port, &expected_binary, pid);
                     if !recorded_port_serves {
                         actual_port = listen_port_of(pid).unwrap_or(inst.local_port);
                     }
@@ -1180,11 +1174,7 @@ pub(crate) fn pid_on_port(port: u16) -> Option<u32> {
 /// a listener owned by THIS process (pid) running the expected binary?
 /// A `true` result means the recorded port is one of the process's own
 /// listeners - the boot sweep must NOT re-key the row away from it.
-pub(crate) fn server_pid_on_port_or_expected(
-    port: u16,
-    expected_binary: &str,
-    pid: u32,
-) -> bool {
+pub(crate) fn server_pid_on_port_or_expected(port: u16, expected_binary: &str, pid: u32) -> bool {
     match pid_on_port(port) {
         Some(holder) => holder == pid && is_expected_binary(holder, expected_binary),
         None => false,

@@ -231,9 +231,7 @@ async fn run_tick(
             // re-check liveness from fresh state; a changed or vanished
             // row is left to its owner (next tick re-evaluates).
             match store::get_instance(conn, &inst.service_type, &inst.key).await {
-                Ok(Some(fresh))
-                    if fresh.pid != 0 && procfs::pid_alive(fresh.pid) =>
-                {
+                Ok(Some(fresh)) if fresh.pid != 0 && procfs::pid_alive(fresh.pid) => {
                     // The row changed under the tick (a respawn already
                     // happened, or the pid was reassigned) - the fresh
                     // process is alive; nothing to heal.
@@ -908,10 +906,8 @@ fn spawn_last_resort_respawner(
                 // orphan (its row deleted by an earlier give-up while it
                 // kept serving) is ADOPTED - registry row re-created at its
                 // live port - instead of spawning a duplicate instance.
-                let expected_binary = crate::server::expected_binary_for(
-                    &alert.service_type,
-                    Some(&entry),
-                );
+                let expected_binary =
+                    crate::server::expected_binary_for(&alert.service_type, Some(&entry));
                 if let Some((port, pid)) = crate::server::find_rowless_live_service(
                     &alert.service_type,
                     &expected_binary,
@@ -942,7 +938,10 @@ fn spawn_last_resort_respawner(
                         warnings: 0,
                         api_calls: 0,
                     };
-                    if crate::store::upsert_instance(&c, &adopted_row).await.is_ok() {
+                    if crate::store::upsert_instance(&c, &adopted_row)
+                        .await
+                        .is_ok()
+                    {
                         tracing::warn!(
                             service = %alert.service_type,
                             port,
