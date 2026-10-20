@@ -45,7 +45,7 @@ pub async fn get_admin_ui(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(page): Path<String>,
-) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, String)> {
+) -> Result<Json<AdminUiResponse>, (axum::http::StatusCode, String)> {
     // Step 5 - Shield decides. Same gate as every other
     // management endpoint - the RFW surface exposes the same approve action
     // the HTTP API does, so it must not be weaker.
