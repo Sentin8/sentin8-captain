@@ -114,7 +114,7 @@ fn probe_signature_never_connected_is_transport_only() {
     // signal, while in grace.
     assert_eq!(
         probe_error_signature(
-            "request to https://auth.ops.sys.sentin8.local:3101/v1/health failed: Connection refused"
+            "request to https://auth.ops.sys.local.sentin8.dev:3101/v1/health failed: Connection refused"
         ),
         WarmUpSignature::NeverConnected
     );

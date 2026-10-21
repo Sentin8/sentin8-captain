@@ -110,7 +110,7 @@ pub async fn probe(
     use_http: bool,
 ) -> HealthProbe {
     let sentin8_domain =
-        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "sentin8.local".to_string());
+        std::env::var("SENTIN8_DOMAIN").unwrap_or_else(|_| "local.sentin8.dev".to_string());
     // Derive the DNS label from the colon identity : convert to the
     // dash form first (`bank8:payments:worker` → `bank8-payments-worker`),
     // then strip the vertical prefix for sentin8 services

@@ -98,7 +98,7 @@ resource "proxmox_virtual_environment_vm" "machine" {
   initialization {
     datastore_id = var.proxmox_storage
     dns {
-      domain = "sentin8.local"
+      domain = "local.sentin8.dev"
     }
     ip_config {
       ipv4 {
