@@ -507,6 +507,10 @@ pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
         "sentin8:secrets".into(),
         mk("sentin8:secrets", "sentin8-secrets", 30),
     );
+    m.insert(
+        "sentin8:sign".into(),
+        mk("sentin8:sign", "sentin8-sign", 30),
+    );
     // Tier 4 - platform business services.
     m.insert("sentin8:app".into(), mk("sentin8:app", "sentin8-app", 40));
     // Tier 5 - BFF + web apps.
