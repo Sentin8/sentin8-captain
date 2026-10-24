@@ -1,4 +1,8 @@
 # Sentin8:Captain - Process Supervisor & Orchestration Layer
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../LICENSE)
+[![Built with Rust](https://img.shields.io/badge/Built%20with-Rust-orange.svg)](https://www.rust-lang.org/)
+[![Docs](https://img.shields.io/badge/docs/read-3aa757.svg)](https://sentin8.dev/docs/services/captain)
+[![Website](https://img.shields.io/badge/website-sentin8.dev-1a73e8.svg)](https://sentin8.dev)
 
 > A **starter** - builds and boots before any service (RS §2.5). Captain
 > links no service binary (invariant RS-2): it spawns, monitors, and

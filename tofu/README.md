@@ -1,9 +1,14 @@
+# tofu/ - the machine-provisioning module kit (FLEET-3, DESIGN §11.5)
+
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../../../LICENSE)
+[![Built with Terraform](https://img.shields.io/badge/Built%20with-Terraform-6C48B4.svg)](https://www.terraform.io/)
+[![Docs](https://img.shields.io/badge/docs-read-3aa757.svg)](https://sentin8.dev/docs/platform/captain)
+[![Website](https://img.shields.io/badge/website-sentin8.dev-1a73e8.svg)](https://sentin8.dev)
+
 # SPDX-FileCopyrightText: Copyright Logically Magic Inc. <hello@logicallymagic.com>
 
 # SPDX-FileCopyrightText: Copyright Hamid Jahanzad <Hamid@Jahanzad.com>
-# SPDX-License-Identifier: Apache-2.0
-
-# tofu/ - the machine-provisioning module kit (FLEET-3, DESIGN §11.5)
+# SPDX-License-Identifier: Apache 2.0
 
 One directory per backend. Captain executes `tofu apply` against the
 directory `SENTIN8_CAPTAIN_TOFU_DIR` points at (the operator copies or
