@@ -41,6 +41,15 @@ pub struct AppState {
     pub conn: glide::GlideClient,
     /// The shutdown tx.
     pub shutdown_tx: watch::Sender<bool>,
+    /// The resolved boot allow-list (READYSCOPE-1): the SAME set the boot
+    /// spawn loop filters with - `Some(set)` for a scoped boot
+    /// (`SENTIN8_SERVICES` enumerated, or the unset platform-only
+    /// default), `None` for a full-fleet boot (`SENTIN8_SERVICES=all`).
+    /// Readiness accounting (startup-stream totals) rides this set - the
+    /// scoped stream reports the scoped types' denominator and completes
+    /// with them, instead of counting never-spawned verticals as pending
+    /// against the catalog union.
+    pub boot_allow: Option<std::collections::HashSet<String>>,
 }
 
 /// Step 5 - Shield decides. Captain's control endpoints are
@@ -274,15 +283,69 @@ pub async fn upgrade_stream(
 /// - event "ready": `{"ready_count": M, "total": M}` (all services Active)
 /// - event "done": `[done]` (stream closes after ready)
 ///
-/// Closes when all catalog services have enough Active instances, or
-/// after 5 minutes with no progress.
+/// Closes when all boot-scoped services have enough Active instances, or
+/// after 5 minutes with no progress. The accounting set is the EFFECTIVE
+/// BOOT SET (READYSCOPE-1): the resolved `SENTIN8_SERVICES` allow-list
+/// when the boot was scoped, the full catalog union otherwise - a
+/// platform-only boot reports `⏳ 18/19` and completes `ready` when the
+/// platform types are Active, rather than waiting forever on 48
+/// deliberately-not-spawned vertical types.
 ///
 /// Shield-gated like every management surface - the gate runs before the
 /// stream opens, so a rejected request never holds a stream. Note the CLI
 /// (`stream_startup`, invoked right after spawning captain) calls this
 /// best-effort: without an operator token it prints a hint and moves on;
 /// `make status` remains the authoritative readiness check.
-/// Handle startup stream.
+///
+/// The accounting set as a pure function (unit-testable without Valkey):
+/// scoped boot → the allow-list ∩ catalog entry types; unscoped → the
+/// full catalog.
+fn readiness_accounting_types(
+    boot_allow: Option<&std::collections::HashSet<String>>,
+    catalog: &HashMap<String, ServiceCatalogEntry>,
+) -> Vec<String> {
+    match boot_allow {
+        Some(allow) => catalog
+            .keys()
+            .filter(|t| allow.contains(*t))
+            .cloned()
+            .collect::<Vec<String>>(),
+        None => catalog.keys().cloned().collect(),
+    }
+}
+
+/// Compute the pending list + counts over an accounting set (READYSCOPE-1
+/// pure helper): a type is pending when fewer than `MIN_INSTANCES`
+/// instances are Active.
+fn readiness_accounting(
+    accounting_types: &[String],
+    active_counts: &HashMap<String, usize>,
+    instances: &[store::ServiceInstance],
+) -> (usize, Vec<serde_json::Value>) {
+    let mut pending: Vec<serde_json::Value> = Vec::new();
+    for service_type in accounting_types {
+        let active = *active_counts.get(service_type).unwrap_or(&0);
+        if active < crate::catalog::MIN_INSTANCES as usize {
+            let status = instances
+                .iter()
+                .find(|i| &i.service_type == service_type)
+                .map(|i| i.status.as_str())
+                .unwrap_or("missing");
+            pending.push(serde_json::json!({
+                "service": service_type,
+                "active": active,
+                "required": crate::catalog::MIN_INSTANCES,
+                "status": status,
+            }));
+        }
+    }
+    (accounting_types.len() - pending.len(), pending)
+}
+
+/// Stream readiness progress until the boot-scoped service set is Active.
+///
+/// The accounting set is the effective boot scope (READYSCOPE-1) - see the
+/// module-level doc on [`readiness_accounting_types`].
 pub async fn startup_stream(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
@@ -291,7 +354,15 @@ pub async fn startup_stream(
 
     let stream = async_stream::stream! {
                let conn = state.conn.clone();
-               let total = state.live_catalog.read().unwrap().len();
+               // READYSCOPE-1: the accounting set is the effective boot
+               // scope, NOT the catalog union. The union stays the live
+               // catalog (start-services/remote spawn can name any type);
+               // this stream only reports types the boot was asked to run.
+               let accounting_types: Vec<String> = {
+                   let catalog = state.live_catalog.read().unwrap();
+                   readiness_accounting_types(state.boot_allow.as_ref(), &catalog)
+               };
+               let total = accounting_types.len();
                let mut last_ready_count = 0usize;
                let mut last_progress = std::time::Instant::now();
 
@@ -308,30 +379,8 @@ pub async fn startup_stream(
                            acc
                        });
 
-        // Check which services are pending.
-                   let mut pending: Vec<serde_json::Value> = Vec::new();
-                   let catalog_entries: Vec<ServiceCatalogEntry> = {
-                       let catalog = state.live_catalog.read().unwrap();
-                       catalog.values().cloned().collect()
-                   };
-                   for entry in &catalog_entries {
-                       let active = *active_counts.get(&entry.service_type).unwrap_or(&0);
-                       if active < crate::catalog::MIN_INSTANCES as usize {
-                           let status = instances
-                               .iter()
-                               .find(|i| i.service_type == entry.service_type)
-                               .map(|i| i.status.as_str())
-                               .unwrap_or("missing");
-                           pending.push(serde_json::json!({
-                               "service": entry.service_type,
-                               "active": active,
-                               "required": crate::catalog::MIN_INSTANCES,
-                               "status": status,
-                           }));
-                       }
-                   }
-
-                   let ready_count = total - pending.len();
+        // Check which services are pending (scoped accounting only).
+                   let (ready_count, pending) = readiness_accounting(&accounting_types, &active_counts, &instances);
                    let ready = pending.is_empty();
 
     // WARN-10: crash-looped services surface as FIRST-CLASS alerts - the
@@ -2013,4 +2062,110 @@ extern "C" {
 }
 unsafe fn kill_signal(pid: u32, sig: i32) -> i32 {
     kill(pid, sig)
+}
+
+#[cfg(test)]
+mod readiness_tests {
+    //! READYSCOPE-1: startup-stream accounting rides the boot scope.
+
+    use super::*;
+
+    fn instance(service_type: &str, port: u16, status: &str) -> store::ServiceInstance {
+        store::ServiceInstance {
+            key: store::ServiceInstance::make_key(service_type, "127.0.0.1", port),
+            service_type: service_type.to_string(),
+            local_ip: "127.0.0.1".to_string(),
+            local_port: port,
+            pid: 1,
+            start_priority: 0,
+            cpu_avg_1m: 0.0,
+            memory_avg_1m: 0.0,
+            rss_mb_avg_1m: 0.0,
+            latency_avg_1m_ms: 0.0,
+            last_health_check: None,
+            started_at: None,
+            version: String::new(),
+            build_hash: String::new(),
+            errors: 0,
+            warnings: 0,
+            api_calls: 0,
+            restarts: 0,
+            status: status.to_string(),
+        }
+    }
+
+    fn catalog_entry(service_type: &str) -> ServiceCatalogEntry {
+        ServiceCatalogEntry {
+            service_type: service_type.to_string(),
+            binary: "bin".into(),
+            binary_path: String::new(),
+            start_priority: 0,
+            fixed_port: 0,
+            health_port: 0,
+            use_http_health: false,
+            upgrade_stop_first: false,
+            extra_env: Default::default(),
+            database_env_vars: Vec::new(),
+            web_root: String::new(),
+            placement: String::new(),
+            singleton: false,
+        }
+    }
+
+    fn mk_catalog(types: &[&str]) -> HashMap<String, ServiceCatalogEntry> {
+        types.iter().map(|t| (t.to_string(), catalog_entry(t))).collect()
+    }
+
+    #[test]
+    fn scoped_accounting_counts_only_allowed_types() {
+        let cat = mk_catalog(&["sentin8:auth", "sentin8:bff", "bank8:ledger"]);
+        let allow: std::collections::HashSet<String> =
+            ["sentin8:auth".to_string(), "sentin8:bff".to_string()].into();
+        let set = readiness_accounting_types(Some(&allow), &cat);
+        assert_eq!(set.len(), 2, "bank8:ledger must NOT be accounted");
+        assert!(set.contains(&"sentin8:auth".to_string()));
+        assert!(set.contains(&"sentin8:bff".to_string()));
+    }
+
+    #[test]
+    fn unscoped_accounting_is_the_full_union() {
+        let cat = mk_catalog(&["sentin8:auth", "bank8:ledger"]);
+        let set = readiness_accounting_types(None, &cat);
+        assert_eq!(set.len(), 2, "unscoped boot accounts the whole union");
+    }
+
+    #[test]
+    fn scoped_totals_exclude_never_spawned_verticals() {
+        // 19 scoped types: 18 Active + 1 crash-looped → 18/19, ONE pending.
+        let cat = mk_catalog(&["sentin8:sign", "bank8:ledger", "sentin8:auth"]);
+        let allow: std::collections::HashSet<String> = ["sentin8:sign".to_string(), "sentin8:auth".to_string()].into();
+        let set = readiness_accounting_types(Some(&allow), &cat);
+        let active: HashMap<String, usize> = [("sentin8:auth".to_string(), 1usize)].into();
+        let instances = vec![instance("sentin8:auth", 8003, "Active")];
+        let (ready, pending) = readiness_accounting(&set, &active, &instances);
+        assert_eq!((ready, set.len()), (1, 2));
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0]["service"], "sentin8:sign");
+        assert_eq!(pending[0]["status"], "missing");
+    }
+
+    #[test]
+    fn all_scoped_active_is_ready() {
+        let cat = mk_catalog(&["sentin8:auth", "sentin8:bff"]);
+        let allow: std::collections::HashSet<String> =
+            ["sentin8:auth".to_string(), "sentin8:bff".to_string()].into();
+        let set = readiness_accounting_types(Some(&allow), &cat);
+        let active: HashMap<String, usize> = [
+            ("sentin8:auth".to_string(), 1usize),
+            ("sentin8:bff".to_string(), 1usize),
+        ]
+        .into();
+        let instances = vec![
+            instance("sentin8:auth", 8003, "Active"),
+            instance("sentin8:bff", 8018, "Active"),
+        ];
+        let (ready, pending) = readiness_accounting(&set, &active, &instances);
+        assert_eq!((ready, set.len()), (2, 2));
+        assert!(pending.is_empty(), "scoped boot completes ready");
+    }
 }

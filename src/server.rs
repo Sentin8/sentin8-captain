@@ -186,6 +186,7 @@ pub async fn serve(
         live_catalog: Arc::new(RwLock::new(config.catalog.clone())),
         conn: conn.clone(),
         shutdown_tx,
+        boot_allow: config.boot_allow.clone(),
     };
     // The TCP router consumes `state`; the UDS router needs its
     // own clone - take it before the move below.

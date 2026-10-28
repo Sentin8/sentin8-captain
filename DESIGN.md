@@ -208,6 +208,19 @@ path too: the CLI resolves the types through the catalog and exports
 them as the boot allow-list for the spawned captain, so the argument
 can no longer be silently dropped when the API is not yet listening.
 
+**Readiness accounting rides the boot scope (READYSCOPE-1).** The
+`GET /v1/captain/startup-stream` SSE feed computes `total` and the
+`pending` list over the EFFECTIVE BOOT SET - the resolved boot
+allow-list threaded into `AppState` - never over the live catalog
+union. A scoped boot reports its own denominator (e.g. the
+platform-core scope → `⏳ 18/19 ready - waiting on: sentin8:sign`) and
+turns `ready` the moment the scoped types are Active; an unscoped
+(`all` or unset-with-union-default) boot keeps union accounting.
+Vertical types deliberately NOT spawned are invisible to the stream -
+they are catalog knowledge for `start-services`/per-instance actions,
+not pending boot work. The scoped stream completes instead of hanging
+to the 300 s cap on types no caller asked to spawn.
+
 | Key | Type | Contents |
 |---|---|---|
 | `captain:svc:{service_type}` | HASH (field `{ip}:{port}`) | `ServiceInstance` JSON. Union-keyed by `(service_type, port)`. |
