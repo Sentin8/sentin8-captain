@@ -332,7 +332,7 @@ impl ServiceCatalogEntry {
                 "SENTIN8_TLS_DATABASE_URL",
                 "SENTIN8_BFF_DATABASE_URL",
                 "VALKEY_URL",
-                // VALKEYDERIVE-1 (group DESIGN.md §3.1): propagate the
+                // (group DESIGN.md §3.1): propagate the
                 // plane's COORDINATES - services derive their Valkey URLs
                 // (valkeys://{host}:{port}/0) or honor an explicit per-service
                 // override from database_env_vars/extra_env. The historical
@@ -357,7 +357,7 @@ impl ServiceCatalogEntry {
                 "SENTIN8_BASE_PORT",
                 "SENTIN8_CAPTAIN_LOCAL_IP",
                 "SENTIN8_AUTH_UI_DIR",
-                // TLS-RLS-4: the platform-plane label map for the
+                // the platform-plane label map for the
                 // database-free hostname resolver (static platform
                 // hostnames - see crates/tls context.rs). Propagated from
                 // the operator/captain environment; nothing
@@ -514,7 +514,7 @@ impl ServiceCatalogEntry {
             "SENTIN8_TLS_DATABASE_URL",
             "SENTIN8_BFF_DATABASE_URL",
             "VALKEY_URL",
-            // VALKEYDERIVE-1: plane coordinates (see the binary_path
+            // plane coordinates (see the binary_path
             // branch comment) - the per-service Valkey URL propagation
             // retired with the inert logical-DB convention.
             "SENTIN8_VALKEY_HOST",

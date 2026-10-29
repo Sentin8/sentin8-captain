@@ -177,7 +177,7 @@ async fn run_tick(
                 && !SHUTTING_DOWN.load(Ordering::SeqCst)
                 && !is_upgrade_in_progress(conn, &inst.key).await
             {
-                // DUPROW-1 (DESIGN §5.10.2): the tick's snapshot can be
+                // (DESIGN §5.10.2): the tick's snapshot can be
                 // seconds stale - RE-READ the row before acting. A row
                 // deleted under the tick (upgrade completion, give-up)
                 // must not be resurrected by `mark_killed`'s HSET-Back.
@@ -222,7 +222,7 @@ async fn run_tick(
                 );
                 continue;
             }
-            // DUPROW-1 (DESIGN §5.10.2): a tick spans >10s over ~80
+            // (DESIGN §5.10.2): a tick spans >10s over ~80
             // rows (health probes); an upgrade completing mid-tick
             // SIGTERMs the old pid and HDELs its row AFTER this list
             // was captured. Acting on the stale snapshot resurrects
@@ -360,7 +360,7 @@ async fn run_tick(
             // for traffic - no need to wait a second tick.
             if inst.status == "Starting" || inst.status == "Started" {
                 let _ = store::mark_active(conn, &inst).await;
-                // WARN-10: the service recovered - clear any crash-loop
+                // the service recovered - clear any crash-loop
                 // alert so the operator surface reflects reality.
                 if let Err(e) = store::clear_alert(conn, &inst.service_type).await {
                     tracing::debug!(error = ?e, service = %inst.service_type, "alert clear failed");
@@ -369,7 +369,7 @@ async fn run_tick(
             }
             if inst.status == "Active" {
                 win.started_ticks += 1;
-                // Stale-alert hygiene (DUPROW-1 follow-up, DESIGN §4
+                // Stale-alert hygiene (follow-up, DESIGN §4
                 // alerts row): the clear must fire on ANY healthy
                 // Active path - boot adoption reaches Active without
                 // passing through `Starting`, and a transition-only
@@ -434,7 +434,7 @@ async fn run_tick(
                     // error string rides the kill log - a misdiagnosed kill (stale
                     // pooled connection, timeout vs refusal) must be auditable.
                     //
-                    // ORPHANLOOP-1 (DESIGN §5.10.2b, seam 1): the failure
+                    // (DESIGN §5.10.2b, seam 1): the failure
                     // window spans multiple ticks - the snapshot's pid can
                     // have died (or been recycled by an unrelated process)
                     // under it. RE-VERIFY liveness immediately before the
@@ -549,7 +549,7 @@ async fn run_tick(
         let _ = crate::provision::evaluate(conn, config).await;
     }
 
-    // Fleet enrollment publication (FLEET-2, DESIGN §11.2): publish the
+    // Fleet enrollment publication (DESIGN §11.2): publish the
     // CURRENT sealed record to `captain:enrollment:{ip}` so any machine's
     // acme can verify any machine's first-boot claim (multi-host fleets:
     // acme is a fleet singleton pinned to the base machine, but a
@@ -901,7 +901,7 @@ fn spawn_last_resort_respawner(
                 else {
                     continue;
                 };
-                // DUPROW-1 (DESIGN §5.10.2, "check the live process, not
+                // (DESIGN §5.10.2, "check the live process, not
                 // just the row"): no live row ≠ no live process. A row-less
                 // orphan (its row deleted by an earlier give-up while it
                 // kept serving) is ADOPTED - registry row re-created at its

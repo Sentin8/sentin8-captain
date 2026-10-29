@@ -322,7 +322,7 @@ fn placement_constraint_parsing() {
     assert!(!mk("").singleton);
 }
 
-// ── Placement gate (FLEET-1, DESIGN §11.3) ────────────────────────────
+// ── Placement gate (DESIGN §11.3) ────────────────────────────
 
 #[test]
 fn platform_catalog_carries_fleet_placement_values() {
@@ -376,7 +376,7 @@ fn placement_gate_singleton_blocks_any_fleet_twin() {
     assert!(placement_admits(&entry, "10.0.0.1", &[], &[]).is_ok());
 }
 
-// ── Remote-spawn selection seam (FLEET-4, DESIGN §11.4) ─────────────
+// ── Remote-spawn selection seam (DESIGN §11.4) ─────────────
 
 #[test]
 fn select_target_machine_prefers_least_loaded_and_excludes_self() {

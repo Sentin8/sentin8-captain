@@ -1,4 +1,4 @@
-# tofu/ - the machine-provisioning module kit (FLEET-3, DESIGN §11.5)
+# tofu/ - the machine-provisioning module kit (DESIGN §11.5)
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../../../LICENSE)
 [![Built with Terraform](https://img.shields.io/badge/Built%20with-Terraform-6C48B4.svg)](https://www.terraform.io/)

@@ -447,7 +447,7 @@ pub async fn self_heal(
         instance.clone()
     };
     if killed.restarts >= MAX_RESTARTS {
-        // WARN-10: the give-up is a FIRST-CLASS operator event, not a log
+        // the give-up is a FIRST-CLASS operator event, not a log
         // line - record a captain:alerts entry (the startup stream + CLI
         // surface it) alongside the error log.
         let log_path = format!(
@@ -469,7 +469,7 @@ pub async fn self_heal(
             tracing::warn!(error = ?e, service = %instance.service_type, "failed to record the give-up alert");
         }
         alert_service_failed(&instance.service_type, killed.restarts);
-        // DUPROW-1 (DESIGN §5.10.2, "check the live process, not just the
+        // (DESIGN §5.10.2, "check the live process, not just the
         // row"): a live SIBLING row of the same service absorbs the
         // alert's recovery duty - the service is NOT down, and deleting
         // this row while the sibling serves must not leave the alert
@@ -496,7 +496,7 @@ pub async fn self_heal(
     if backoff_s > 0 {
         tokio::time::sleep(Duration::from_secs(backoff_s)).await;
     }
-    // DUPROW-1 (DESIGN §5.10.2, "check the live process, not just the
+    // (DESIGN §5.10.2, "check the live process, not just the
     // row"): a SECOND dead row of the same service must not mint a
     // duplicate process when a live SIBLING row already serves the
     // type. Two concurrently-dead rows (the pre-existing doubles; a
@@ -519,7 +519,7 @@ pub async fn self_heal(
         let _ = store::delete_instance(conn, &killed).await;
         return Ok(HealAction::NoAction);
     }
-    // ORPHANLOOP-1 (DESIGN §5.10.2b, seam 2 - "the port is the truth; the
+    // (DESIGN §5.10.2b, seam 2 - "the port is the truth; the
     // row is a cache"): before any same-key respawn, check whether a LIVE
     // process already holds the target port. A stop/start can leave a
     // healthy orphan serving with NO registry row (its boot spawn died at
@@ -549,7 +549,7 @@ pub async fn self_heal(
                     service = %killed.service_type,
                     port = killed.local_port,
                     pid = holder_pid,
-                    "self-heal: adopted the row-less live process holding the port - no duplicate spawned (ORPHANLOOP-1)"
+ "self-heal: adopted the row-less live process holding the port - no duplicate spawned "
                 );
                 return Ok(HealAction::NoAction);
             }

@@ -579,7 +579,7 @@ async fn start_and_register_all(conn: &glide::GlideClient, config: &CaptainConfi
         let svc = service_type.to_string();
         let entry_clone = (*entry).clone();
 
-        // Placement gate (FLEET-1, DESIGN §11.3): every spawn site consults
+        // Placement gate (DESIGN §11.3): every spawn site consults
         // the same seam. At boot this is how machine B spawns its correct
         // subset WITHOUT a per-machine SENTIN8_SERVICES list - a pin to
         // another machine skips the spawn, an anti/singleton violation
@@ -987,7 +987,7 @@ async fn reconcile_existing(
     let mut adopted: std::collections::HashMap<String, AdoptedInstance> =
         std::collections::HashMap::new();
     for inst in &existing {
-        // DUPROW-1 (DESIGN §5.10.2): `Starting` rows are adoptable too.
+        // (DESIGN §5.10.2): `Starting` rows are adoptable too.
         // A last-resort/self-heal spawn whose captain died before its
         // monitor tick promoted the row is a LIVE orphan in `Starting` -
         // excluding it here left it invisible to adoption, and the boot
@@ -1038,7 +1038,7 @@ async fn reconcile_existing(
                     continue;
                 }
                 // Adopt: correct the row's port to the AUTHORITY port
-                // when one exists (DUPROW-1 seam 5, DESIGN §5.10.2 -
+                // when one exists (seam 5, DESIGN §5.10.2 -
                 // the port-25 trap). Rule order:
                 // (a) catalog `fixed_port` + the process holds it →
                 //     re-key to the fixed port (the declared health
@@ -1171,7 +1171,7 @@ pub(crate) fn pid_on_port(port: u16) -> Option<u32> {
     pid_str.parse::<u32>().ok()
 }
 
-/// DUPROW-1 seam 5 helper (DESIGN §5.10.2): does the recorded port hold
+/// seam 5 helper (DESIGN §5.10.2): does the recorded port hold
 /// a listener owned by THIS process (pid) running the expected binary?
 /// A `true` result means the recorded port is one of the process's own
 /// listeners - the boot sweep must NOT re-key the row away from it.
@@ -1182,7 +1182,7 @@ pub(crate) fn server_pid_on_port_or_expected(port: u16, expected_binary: &str, p
     }
 }
 
-/// DUPROW-1 (DESIGN §5.10.2, "check the live process, not just the row"):
+/// (DESIGN §5.10.2, "check the live process, not just the row"):
 /// locate a LIVE, row-less process serving `service_type` by scanning the
 /// port range for a listener whose binary identity matches the type's
 /// expected binary. Used by the last-resort respawner when the registry

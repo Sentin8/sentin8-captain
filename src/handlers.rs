@@ -23,7 +23,7 @@ use crate::store;
 pub struct AppState {
     /// The config.
     pub config: Arc<CaptainConfig>,
-    /// Shield engine (Phase - ): step 5 gates every
+    /// Shield engine (Phase): step 5 gates every
     /// control endpoint. Captain has no tenant realm of its own - the
     /// scope-mirror permit is platform-admin keyed.
     /// The policy.
@@ -41,7 +41,7 @@ pub struct AppState {
     pub conn: glide::GlideClient,
     /// The shutdown tx.
     pub shutdown_tx: watch::Sender<bool>,
-    /// The resolved boot allow-list (READYSCOPE-1): the SAME set the boot
+    /// The resolved boot allow-list : the SAME set the boot
     /// spawn loop filters with - `Some(set)` for a scoped boot
     /// (`SENTIN8_SERVICES` enumerated, or the unset platform-only
     /// default), `None` for a full-fleet boot (`SENTIN8_SERVICES=all`).
@@ -95,7 +95,7 @@ pub(crate) async fn require_captain_policy(
     Ok(())
 }
 
-/// Step 5 for the remote-spawn surface (FLEET-4, DESIGN §11.4) - the same
+/// Step 5 for the remote-spawn surface (DESIGN §11.4) - the same
 /// 8-step pipeline, a DIFFERENT action: the M2M `captain-remote` workload
 /// presents the granular `sentin8:captain:instances:write` scope, so the
 /// Shield evaluation targets that action, not the operator
@@ -285,7 +285,7 @@ pub async fn upgrade_stream(
 ///
 /// Closes when all boot-scoped services have enough Active instances, or
 /// after 5 minutes with no progress. The accounting set is the EFFECTIVE
-/// BOOT SET (READYSCOPE-1): the resolved `SENTIN8_SERVICES` allow-list
+/// BOOT SET : the resolved `SENTIN8_SERVICES` allow-list
 /// when the boot was scoped, the full catalog union otherwise - a
 /// platform-only boot reports `⏳ 18/19` and completes `ready` when the
 /// platform types are Active, rather than waiting forever on 48
@@ -314,7 +314,7 @@ fn readiness_accounting_types(
     }
 }
 
-/// Compute the pending list + counts over an accounting set (READYSCOPE-1
+/// Compute the pending list + counts over an accounting set (
 /// pure helper): a type is pending when fewer than `MIN_INSTANCES`
 /// instances are Active.
 fn readiness_accounting(
@@ -344,7 +344,7 @@ fn readiness_accounting(
 
 /// Stream readiness progress until the boot-scoped service set is Active.
 ///
-/// The accounting set is the effective boot scope (READYSCOPE-1) - see the
+/// The accounting set is the effective boot scope - see the
 /// module-level doc on [`readiness_accounting_types`].
 pub async fn startup_stream(
     State(state): State<AppState>,
@@ -354,7 +354,7 @@ pub async fn startup_stream(
 
     let stream = async_stream::stream! {
                let conn = state.conn.clone();
-               // READYSCOPE-1: the accounting set is the effective boot
+               // the accounting set is the effective boot
                // scope, NOT the catalog union. The union stays the live
                // catalog (start-services/remote spawn can name any type);
                // this stream only reports types the boot was asked to run.
@@ -383,7 +383,7 @@ pub async fn startup_stream(
                    let (ready_count, pending) = readiness_accounting(&accounting_types, &active_counts, &instances);
                    let ready = pending.is_empty();
 
-    // WARN-10: crash-looped services surface as FIRST-CLASS alerts - the
+    // crash-looped services surface as FIRST-CLASS alerts - the
     // CLI prints them and the operator sees WHICH service gave up and where
     // to look, instead of a silent 'waiting on' loop that ends in timeout.
                    let alerts = store::list_alerts(&conn).await.unwrap_or_default();
@@ -1482,7 +1482,7 @@ pub async fn list_catalog(
 }
 
 /// `GET /v1/captain/alerts` - the crash-loop (give-up) alert list
-/// (WARN-10): every service captain gave up on after MAX_RESTARTS and
+/// : every service captain gave up on after MAX_RESTARTS and
 /// has not yet recovered. Consumed by `captain services` (the
 /// "manual intervention required" list printed after the instance
 /// table) and by the RFW surfaces. The alert record is cleared
@@ -1673,7 +1673,7 @@ pub(crate) async fn spawn_one_service(
     service_type: &str,
     entry: &ServiceCatalogEntry,
 ) -> Result<u16, String> {
-    // Placement gate (FLEET-1, DESIGN §11.3): every spawn site consults the
+    // Placement gate (DESIGN §11.3): every spawn site consults the
     // same seam - a refusal is a structured reject with the reason.
     let all = store::list_all(conn)
         .await
@@ -1849,7 +1849,7 @@ pub async fn start_services(
     })))
 }
 
-/// `POST /v1/captain/instances` - the remote-spawn endpoint (FLEET-4,
+/// `POST /v1/captain/instances` - the remote-spawn endpoint (
 /// DESIGN §11.4).
 ///
 /// This is the SAME spawn path as `/v1/captain/start-services` (the target
@@ -2066,7 +2066,7 @@ unsafe fn kill_signal(pid: u32, sig: i32) -> i32 {
 
 #[cfg(test)]
 mod readiness_tests {
-    //! READYSCOPE-1: startup-stream accounting rides the boot scope.
+    //! startup-stream accounting rides the boot scope.
 
     use super::*;
 

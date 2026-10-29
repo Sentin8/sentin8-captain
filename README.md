@@ -5,7 +5,7 @@
 [![Website](https://img.shields.io/badge/website-sentin8.dev-1a73e8.svg)](https://sentin8.dev)
 
 > A **starter** - builds and boots before any service (RS §2.5). Captain
-> links no service binary (invariant RS-2): it spawns, monitors, and
+> links no service binary (invariant): it spawns, monitors, and
 > health-gates processes, reading their self-description from
 > `--print-registration` output and `catalog.json` files.
 >
@@ -62,7 +62,7 @@ graph TD
   the :443 ingress). A violation is a structured refusal, never a
   wrong-machine spawn.
 - **Crash-loop give-up + slow self-recovery (DESIGN §5.10.1)** - after
-  the restart cap the service is alerted (WARN-10) AND re-attempted one
+  the restart cap the service is alerted AND re-attempted one
   spawn per `SENTIN8_CAPTAIN_LAST_RESORT_RESPAWN_S` (default 300s, `0`
   disables) until it comes back; the alert clears only when the service
   is `Active` again.

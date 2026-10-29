@@ -127,7 +127,7 @@ pub async fn evaluate(
     // ── Scale-up check ──────────────────────────────────────────────────
     for (service_type, started) in &by_type {
         let entry = match config.catalog.get(service_type) {
-            // Placement gate (FLEET-1, DESIGN §11.3): the scaler has no
+            // Placement gate (DESIGN §11.3): the scaler has no
             // machine choice to make - a constrained service that does not
             // admit a second instance on THIS machine (pin to elsewhere,
             // anti violated, singleton) never scales here. Multi-machine

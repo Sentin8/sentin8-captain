@@ -105,13 +105,13 @@ const M2M_GRANTS: &[sentin8::registration::M2mGrant] = &[
     },
     sentin8::registration::M2mGrant {
         workload: "captain-remote",
-        // FLEET-4 (DESIGN §11.4): the remote-spawn workload - the
+        // (DESIGN §11.4): the remote-spawn workload - the
         // cert-bound M2M identity the autoscaler leader presents to
         // another machine's captain when placing a service there.
         // Granular scope: instances only, never the operator admin scope.
         scopes: &["sentin8:captain:instances:write"],
     },
-    // TLS-RLS-4 (design/sentin8-vertical-data-plane-contract.md §VDC.7): the database-free HostContextResolver’s resolve workload - cache miss calls Sys `GET /v1/resolve/hostname`.
+    // (design/sentin8-vertical-data-plane-contract.md §VDC.7): the database-free HostContextResolver’s resolve workload - cache miss calls Sys `GET /v1/resolve/hostname`.
     sentin8::registration::M2mGrant {
         workload: "sentin8-captain-tls",
         scopes: &["sentin8:sys:instances:read"],

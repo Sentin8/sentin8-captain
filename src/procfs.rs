@@ -218,7 +218,7 @@ pub struct HostSample {
 static PREV_CPU: std::sync::OnceLock<std::sync::Mutex<(u64, u64, u64, u64)>> =
     std::sync::OnceLock::new();
 
-/// Telemetry mode (FLEET-5, DESIGN §11.6): `procfs` (default - whole-host
+/// Telemetry mode (DESIGN §11.6): `procfs` (default - whole-host
 /// `/proc` reads, correct for bare-metal/cloud) or `cgroup` (the
 /// container's OWN cgroup v2 namespace - `/proc/stat` is NOT namespaced,
 /// so every docker-backend sibling reports host-level saturation in
@@ -314,7 +314,7 @@ fn sample_host_procfs() -> HostSample {
     }
 }
 
-/// The `cgroup` mode (FLEET-5, DESIGN §11.6): read the container's OWN
+/// The `cgroup` mode (DESIGN §11.6): read the container's OWN
 /// cgroup v2 accounting - `cpu.stat` (usec) for CPU%, `memory.current` +
 /// `memory.max` for memory. In a container namespace `/proc/stat` reports
 /// the HOST, so sibling containers saturate in lockstep and the

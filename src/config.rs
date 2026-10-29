@@ -123,7 +123,7 @@ impl CaptainConfig {
     /// Handle from env.
     pub fn from_env() -> Self {
         let valkey_url = env::var("SENTIN8_CAPTAIN_VALKEY_URL").unwrap_or_else(|_| {
-            // VALKEYDERIVE-1: override chain → else the plane-derived URL.
+            // override chain → else the plane-derived URL.
             std::env::var("VALKEY_URL")
                 .ok()
                 .filter(|s| !s.trim().is_empty())
@@ -143,7 +143,7 @@ impl CaptainConfig {
         // `bank8-payments-worker`) - all canonicalized to the colon form.
         // Example: SENTIN8_SERVICES=sentin8:auth,sentin8:bff,sentin8:bus
         //
-        // Boot scope default (STARTSCOPE-2, DESIGN §3): when UNSET, boot
+        // Boot scope default (DESIGN §3): when UNSET, boot
         // spawns the PLATFORM services only (`sentin8:*` from the built-in
         // catalog) - never the external vertical entries. `all` (or an
         // enumerated list) is the explicit opt-in for a full multi-vertical
@@ -161,7 +161,7 @@ impl CaptainConfig {
                     .map(normalize_service_type)
                     .collect::<std::collections::HashSet<String>>(),
             ),
-            // Unset → platform-only boot scope (STARTSCOPE-2).
+            // Unset → platform-only boot scope .
             Err(_) => Some(
                 default_catalog()
                     .keys()
@@ -207,7 +207,7 @@ impl CaptainConfig {
             }
         }
 
-        // TLS-RLS-4 (design/sentin8-vertical-data-plane-contract.md §VDC.7):
+        // (design/sentin8-vertical-data-plane-contract.md §VDC.7):
         // derive the platform-plane hostname label map from the RUNTIME
         // CATALOG - registry-driven, zero hardcoded verticals. The
         // database-free TLS resolver in every spawned service maps
@@ -433,7 +433,7 @@ pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
             upgrade_stop_first: false,
             extra_env: Default::default(),
             database_env_vars: Vec::new(),
-            // FLEET-1 (DESIGN §11.3): the CA plane must never fork -
+            // (DESIGN §11.3): the CA plane must never fork -
             // exactly one acme instance for the whole fleet. The placement
             // gate refuses any second spawn on any machine.
             placement: String::new(),
@@ -467,7 +467,7 @@ pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
             upgrade_stop_first: false,
             extra_env: Default::default(),
             database_env_vars: Vec::new(),
-            // FLEET-1 (DESIGN §11.3): the ingress is pinned to the operator's
+            // (DESIGN §11.3): the ingress is pinned to the operator's
             // edge machine (`SENTIN8_CAPTAIN_EDGE_IP` on that host) and is a
             // fleet singleton - one :443 data plane.
             placement: "pin:edge".into(),

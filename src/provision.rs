@@ -9,7 +9,7 @@
 //! election" principle: exactly ONE captain instance fleet-wide holds the
 //! provisioning role, elected via a Valkey advisory lock. The election governs
 //! ONLY the provisioning decision loop - process supervision stays per-machine
-//! and election-free (-).
+//! and election-free .
 //!
 //! Scaling axes:
 //! - Vertical (in-machine): the scaler adds instances up to
@@ -536,7 +536,7 @@ impl Provisioner for TofuProvisioner {
             busy_service = %req.busy_service,
             "tofu: applying provision (OpenTofu)"
         );
-        // FLEET-3 (DESIGN §11.5): the operator env contract - the module
+        // (DESIGN §11.5): the operator env contract - the module
         // materializes `sentin8_env_file`'s content as the machine's
         // /etc/sentin8/sentin8.env (the systemd unit sources it). The
         // content travels as a file var (sensitive), never logged; the
@@ -598,7 +598,7 @@ impl Provisioner for TofuProvisioner {
 
     async fn deprovision(&self, ip: &str) -> Result<(), anyhow::Error> {
         tracing::info!(ip, backend = %self.backend, "tofu: applying deprovision");
-        // FLEET-3 (DESIGN §11.5): graceful leave FIRST - best-effort call to
+        // (DESIGN §11.5): graceful leave FIRST - best-effort call to
         // the target captain's /v1/captain/shutdown so services stop and
         // registry rows delete before the machine is destroyed. A
         // machine that cannot be reached is destroyed anyway (its rows
@@ -625,7 +625,7 @@ impl Provisioner for TofuProvisioner {
     }
 }
 
-/// Ask the machine at `ip` to leave the fleet gracefully (FLEET-3,
+/// Ask the machine at `ip` to leave the fleet gracefully (
 /// DESIGN §11.5): `POST /v1/captain/shutdown` on its captain stops its
 /// services, deletes its registry rows, and clears its enrollment record -
 /// a clean exit instead of a destroyed machine's stale entries.
@@ -655,7 +655,7 @@ async fn graceful_leave(ip: &str) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-// ── Remote spawn (FLEET-4, DESIGN §11.4) ────────────────────────
+// ── Remote spawn (DESIGN §11.4) ────────────────────────
 
 /// Candidate machine for the remote-spawn selection seam.
 #[derive(Debug, Clone)]
@@ -690,7 +690,7 @@ pub fn select_target_machine(
         .cloned()
 }
 
-/// Remotely spawn `service_type` on the chosen machine (FLEET-4,
+/// Remotely spawn `service_type` on the chosen machine (
 /// DESIGN §11.4): `POST /v1/captain/instances` on the target captain with
 /// the cert-bound `captain-remote` M2M workload's token
 /// (`sentin8:captain:instances:write`).
@@ -748,7 +748,7 @@ pub async fn remote_spawn(
 }
 
 /// Extracted tail call: `evaluate`'s scale-out half found the pressure
-/// already placed (FLEET-4 remote spawn) - run only the scale-in half
+/// already placed (remote spawn) - run only the scale-in half
 /// with the tick's machine list. Mirrors `scale_in`'s contract.
 async fn skip_to_scale_in(
     conn: &glide::GlideClient,
@@ -935,7 +935,7 @@ pub async fn evaluate(
     }
 
     if let Some(req) = provision_req {
-        // FLEET-4 (DESIGN §11.4): before provisioning a NEW machine, try
+        // (DESIGN §11.4): before provisioning a NEW machine, try
         // placing the busy service on an EXISTING machine - remote spawn
         // first, provision second. The selection is placement- and
         // load-aware; a 409/transport failure falls through to the
@@ -1048,7 +1048,7 @@ pub async fn evaluate(
 }
 
 /// The scale-in half of one autoscaler evaluation - extracted so the
-/// remote-spawn placement path (FLEET-4) can skip the scale-out half
+/// remote-spawn placement path can skip the scale-out half
 /// without duplicating the idle logic. Same invariants: at most one
 /// machine per tick, LIFO never retires the base machine, cooldown is
 /// shared with scale-out.

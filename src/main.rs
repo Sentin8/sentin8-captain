@@ -123,7 +123,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     sentin8::middleware::error_metrics::spawn_publisher(
-        // VALKEYDERIVE-1: override → else the plane-derived URL.
+        // override → else the plane-derived URL.
         std::env::var("VALKEY_URL")
             .ok()
             .filter(|s| !s.trim().is_empty())
@@ -134,7 +134,7 @@ async fn main() -> anyhow::Result<()> {
     let config = config::CaptainConfig::from_env();
     tracing::info!(
         service = "sentin8:captain",
-        // BUILDID-1: the full identity - {version}+{hash}[.d] - in the
+        // the full identity - {version}+{hash}[.d] - in the
         // banner; the spawn-seeded registry entry keeps version/build raw
         // (the monitor overwrites both from the first health probe).
         version = %sentin8::build_info::id(),
