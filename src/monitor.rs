@@ -141,6 +141,107 @@ pub fn spawn(
     });
 }
 
+
+/// (DESIGN §5.10.4): the fleet invariant is ONE live instance per service
+/// type per machine. The rolling-upgrade seam has two interleaved windows
+/// where a second Active row can legally exist only WHILE the upgrade runs
+/// (spawned-not-yet-stable + old draining); once the upgrade's terminal
+/// phase lands, any leftover sibling row is a defect (the 2026-10-29
+/// web@8017+8020 split-brain: the proxy round-robined a cert-holding and a
+/// cert-less instance, and dash answered 200/000 alternately). This sweep
+/// runs at the top of EVERY monitor tick: group live rows by service type,
+/// keep the single best (highest started_at, then the most-recently
+/// reaped - newest registry start wins), stop + delete every other live
+/// sibling. Upgrades in progress (either sibling mid-flight) are skipped -
+/// the upgrade's own paths own their cleanup; the next tick cleans up
+/// whatever the upgrade left. Rows whose pid is dead are left to the
+/// regular crash-reconcile paths (they are not siblings serving traffic).
+async fn sweep_duplicate_instances(
+    conn: &glide::GlideClient,
+    config: &CaptainConfig,
+    live_catalog: &Arc<RwLock<HashMap<String, crate::catalog::ServiceCatalogEntry>>>,
+    instances: &[store::ServiceInstance],
+) {
+    // Group live-pid siblings by service type (a dead-pid row is crash
+    // territory, not a serving duplicate - the normal heal paths own it).
+    let mut by_type: HashMap<String, Vec<&store::ServiceInstance>> = HashMap::new();
+    for inst in instances {
+        if inst.pid == 0 {
+            continue;
+        }
+        by_type
+            .entry(inst.service_type.clone())
+            .or_default()
+            .push(inst);
+    }
+    for (service_type, siblings) in by_type {
+        if siblings.len() < 2 {
+            continue;
+        }
+        // Skip the whole type while ANY sibling has an upgrade in flight -
+        // the run owns both rows until its terminal phase lands.
+        let mut upgrade_running = false;
+        for sib in &siblings {
+            if is_upgrade_in_progress(conn, &sib.key).await {
+                upgrade_running = true;
+                break;
+            }
+        }
+        if upgrade_running || SHUTTING_DOWN.load(Ordering::SeqCst) {
+            continue;
+        }
+        // Keep the single winner: prefer Active over every other status,
+        // then the LATEST started_at (the newest spawn is the one the
+        // upgrade flow just promoted).
+        let mut ranked = siblings.iter().collect::<Vec<_>>();
+        ranked.sort_by(|a, b| {
+            let a_active = (a.status == "Active") as u8;
+            let b_active = (b.status == "Active") as u8;
+            b_active
+                .cmp(&a_active)
+                .then(b.started_at.or(Some(0)).cmp(&a.started_at.or(Some(0))))
+        });
+        let keep = ranked[0];
+        for loser in &ranked[1..] {
+            // RE-READ before acting (the ticking snapshot can be seconds
+            // stale - the row may have been deleted/superseded under it).
+            let fresh = match store::get_instance(conn, &service_type, &loser.key)
+                .await
+            {
+                Ok(Some(f)) => f,
+                Ok(None) => continue,
+                Err(_) => continue,
+            };
+            if fresh.pid == 0 || !procfs::pid_alive(fresh.pid) {
+                continue;
+            }
+            let entry = {
+                let catalog = live_catalog.read().unwrap();
+                match catalog.get(&service_type) {
+                    Some(e) => e.clone(),
+                    None => continue,
+                }
+            };
+            tracing::warn!(
+                service = %service_type,
+                key = %fresh.key,
+                pid = fresh.pid,
+                keep = %keep.key,
+                "duplicate-instance sweep: a second live instance of an                  already-active service is a defect - stopping it"
+            );
+            let _ = crate::supervisor::stop(
+                conn,
+                &fresh,
+                &entry,
+                fresh.pid,
+                crate::catalog::GRACE_PERIOD_S,
+                config.upgrade_drain_s,
+            )
+            .await;
+        }
+    }
+}
+
 async fn run_tick(
     conn: &glide::GlideClient,
     config: &CaptainConfig,
@@ -155,6 +256,7 @@ async fn run_tick(
             return;
         }
     };
+    sweep_duplicate_instances(conn, config, live_catalog, &instances).await;
     for inst in instances {
         let entry = match live_catalog.read().unwrap().get(&inst.service_type) {
             Some(e) => e.clone(),

@@ -342,12 +342,26 @@ row")**:
    declared health surface heals rows parked on protocol ports);
    (b) the recorded port the process holds → TRUST it; (c) neither →
    lowest-listener fallback (genuinely stale rows).
+6. **Tick-top duplicate sweep (repairs, not only prevents).** The five
+   seams above stop new minting; leaves from a botched upgrade still
+   survived when the terminal phases raced (the 2026-10-29
+   web@8017+8020 split-brain: the proxy round-robined a cert-holding
+   and a cert-less instance and dash answered `200/000` alternately).
+   The monitor tick now opens with `sweep_duplicate_instances`: group
+   live rows by service type; when two or more live siblings exist AND
+   no upgrade is in flight for the type, keep ONE (the `Active` row,
+   then the newest `started_at`) and stop + delete the rest through the
+   regular supervisor path (drain → SIGTERM → row delete). The sweep
+   re-reads each loser row before acting (the stale-snapshot rule,
+   seam 1) and skips entirely during shutdown. This repairs the live
+   registry inside one tick (2 s) without operator intervention -
+   `make status` doubles self-converge.
 
-**Convergence (operator surface)**: `make status` shows doubles today.
-The fix stops NEW minting; the existing doubles converge by restarting
-the affected services one at a time (`make restart-instance` on the
-younger row's key - the stop path deletes its row, the fleet returns to
-one row per service). No migration code: the registry is runtime state.
+**Convergence (operator surface)**: existing doubles converge
+automatically - the tick-top sweep (seam 6) stops the excess instance
+inside one tick, after any in-flight upgrade's terminal phase lands. No
+operator action, no migration code: the registry is runtime state. The
+`sweep` log lines name the loser key it stopped for the audit trail.
 
 ### 5.10.2b Self-heal must probe the PORT, not just the row
 
