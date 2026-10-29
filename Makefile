@@ -26,3 +26,4 @@ test: ## cargo test
 
 clean: ## cargo clean
 	@$(CARGO) clean
+	@rm -rf .run .run/logs .tmp
