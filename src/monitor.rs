@@ -1053,10 +1053,20 @@ fn spawn_last_resort_respawner(
                     }
                     continue;
                 }
+                // STAGGER (the appliance flap-wave lesson): a burst of
+                // respawns re-creates the boot-time spawn storm - many
+                // services building pools at once - which is how the wave
+                // kept killing its own children in one acquire-timeout
+                // sweep, oscillating forever. One spawn per 3s rides out
+                // any contention; a healthy PG accepts it in 100ms.
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                if SHUTTING_DOWN.load(Ordering::SeqCst) {
+                    return;
+                }
                 tracing::warn!(
                     service = %alert.service_type,
                     interval_s = config.last_resort_respawn_s,
-                    "captain: last-resort respawn attempt for an alerted service"
+                    "captain: last-resort respawn attempt (staggered)"
                 );
                 if let Err(e) = crate::handlers::spawn_one_service(
                     &c,
