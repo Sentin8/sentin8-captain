@@ -692,6 +692,29 @@ pub async fn service_action(
             return Err((axum::http::StatusCode::CONFLICT, m));
         }
     };
+    // Locality guard (DESIGN §11.11 - the core appliance profile): every
+    // per-instance action below operates on PROCESS ids (`inst.pid` is a
+    // pid in THIS captain's namespace; spawn/stop run in THIS netns). A
+    // key owned by a DIFFERENT machine of the fleet must never be
+    // actioned here - the pid would belong to an unrelated process on
+    // this machine (the shared registry makes every machine's keys
+    // resolvable everywhere, so the guard is load-bearing, not
+    // theoretical). The CLI is the router (it dials the owning captain
+    // per key ip); this refusal is the direct-API misuse catch and it
+    // names the owner so a misrouted caller learns where to go.
+    if inst.local_ip != state.config.local_ip {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            format!(
+                "instance '{key}' belongs to machine {} - this captain ({}) \
+                 refuses per-instance actions for foreign machines (the pid \
+                 namespace differs). Route the call to the owning machine's \
+                 captain (the CLI's per-key routing does this; direct API \
+                 callers must dial {} themselves).",
+                inst.local_ip, state.config.local_ip, inst.local_ip
+            ),
+        ));
+    }
     // SELFUP- : EVERY
     // per-instance action on the captain row targets the supervisor itself.
     // `restart` SIGTERMs captain's own pid (the control plane died while
