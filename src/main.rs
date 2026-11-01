@@ -53,11 +53,12 @@ async fn main() -> anyhow::Result<()> {
         return sentin8_captain_server::registration::print(section);
     }
 
-    // Install the Graviola PQ crypto provider before any reqwest HTTPS call
+    // Install the platform PQ crypto provider before any reqwest HTTPS call
     // the policy admin surface's auth client (token verification against
     // Sentin8:Auth) builds one, and reqwest panics "No provider set" without
-    // a provider (COLD-START-1).
-    let _ = sentin8::tls::crypto::sentin8_pq_provider().install_default();
+    // a provider (COLD-START-1). install_platform_provider assembles the
+    // PQ verification algorithms + the ML-DSA key provider (PQCLIENT-1).
+    sentin8::tls::crypto::install_platform_provider();
 
     let _ = dotenvy::dotenv();
     let _ = sentin8::middleware::error_metrics::init_tracing_with_metrics(
