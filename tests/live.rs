@@ -72,7 +72,7 @@ fn inst(svc: &str, port: u16, status: &str, restarts: i32) -> ServiceInstance {
         status: status.into(),
         restarts,
         started_at: Some(chrono::Utc::now().timestamp()),
-        version: "0.1.0".into(),
+        version: "1.0.0".into(),
         build_hash: "abc123".into(),
         errors: 0,
         warnings: 0,
