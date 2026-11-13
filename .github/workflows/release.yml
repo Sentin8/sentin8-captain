@@ -15,7 +15,7 @@ on:
 
 jobs:
   release:
-    uses: Sentin8/sentin8-ci/.github/workflows/repo-release.yml@ci-v2
+    uses: Sentin8/sentin8-ci/.github/workflows/repo-release.yml@ci-v2a
     with:
       repo-class: 'rust'
       sentin8-flutter-path: ''
