@@ -494,6 +494,22 @@ pub fn default_catalog() -> HashMap<String, ServiceCatalogEntry> {
         "sentin8:stat".into(),
         mk("sentin8:stat", "sentin8-stat", 30),
     );
+    // Platform push fan-out (web-push / device delivery). Tier 3 like every
+    // other platform middleware service: no fixed port, no placement pin,
+    // no singleton, resolved through the standard
+    // `SENTIN8_CAPTAIN_BINARY_PREFIX` search.
+    //
+    // This entry MUST exist. Without it `sentin8:push` was absent from the
+    // catalog entirely, so the captain could not resolve it by binary name.
+    // The service then fell through to the catalog's last-resort
+    // `vertical_root/target/release/<binary>` path and ran a STALE release
+    // binary from a different profile than the rest of the fleet (every other
+    // service runs `target/debug`), which broke its health probe and put it
+    // in a restart loop. Being catalogued makes push ordinary.
+    m.insert(
+        "sentin8:push".into(),
+        mk("sentin8:push", "sentin8-push", 30),
+    );
     m.insert(
         "sentin8:func".into(),
         mk("sentin8:func", "sentin8-func", 30),
@@ -559,5 +575,33 @@ mod tests {
             normalize_service_type("bank8-payments-worker"),
             "bank8:payments:worker"
         );
+    }
+
+    /// Every platform service binary in the tree must have a catalog entry.
+    ///
+    /// `sentin8:push` was missing, so the captain could not resolve it by
+    /// binary name and fell through to the catalogs last-resort
+    /// `<root>/target/release/<binary>` guess - running a stale release
+    /// binary while the whole rest of the fleet ran `target/debug`. That
+    /// divergence is what put push in a health-probe restart loop.
+    #[test]
+    fn push_is_catalogued_like_its_tier_peers() {
+        let cat = default_catalog();
+        let push = cat
+            .get("sentin8:push")
+            .expect("sentin8:push must be in the built-in platform catalog");
+        assert_eq!(push.binary, "sentin8-push");
+        // Ordinary service: resolved by prefix search, not a pinned path.
+        assert!(
+            push.binary_path.is_empty(),
+            "push must resolve through SENTIN8_CAPTAIN_BINARY_PREFIX like every peer"
+        );
+        assert!(!push.singleton, "push gains no singleton constraint");
+        assert!(push.placement.is_empty(), "push gains no placement pin");
+        assert!(push.web_root.is_empty(), "push is not a web-root app");
+        assert_eq!(push.fixed_port, 0, "push port stays captain-assigned");
+        // Same start tier as the other platform middleware services.
+        let stat = cat.get("sentin8:stat").expect("stat catalogued");
+        assert_eq!(push.start_priority, stat.start_priority);
     }
 }
