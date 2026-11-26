@@ -5,13 +5,18 @@
 
 //! Health probes for supervised services.
 //!
-//! Always probes `https://{sni_host}:{port}{health_path}` - all managed
-//! services terminate TLS directly. Certificate verification is
-//! **disabled** because Captain pins DNS resolution to the instance IP
-//! via `resolve`, so the connection goes directly to the instance
-//! (bypassing Sentin8:TLS proxy). The certificate presented by the
-//! instance may be self-signed or issued for a different hostname, so
-//! strict verification would fail.
+//! Always probes `https://{sni_host}{health_path}` - all managed services
+//! terminate TLS directly. The URL deliberately carries NO port: the transport
+//! is pinned to the instance by `resolve(sni_host, socket_addr)`, where the port
+//! lives, so the authority stays the stable service name. Putting the port in
+//! the URL would change the origin on every respawn and pin the probe to a
+//! single instance, which breaks the pooled client and defeats scaling.
+//!
+//! Certificate verification is **disabled** because Captain pins DNS resolution
+//! to the instance IP via `resolve`, so the connection goes directly to the
+//! instance (bypassing Sentin8:TLS proxy). The certificate presented by the
+//! instance may be self-signed or issued for a different hostname, so strict
+//! verification would fail.
 //!
 //! A 2xx response within the timeout is healthy.
 //!
@@ -127,10 +132,27 @@ pub async fn probe(
         local_port,
     ));
 
+    // The URL must carry NO port. Two reasons:
+    //
+    //  1. The port would appear in the Host/authority the service sees, and a
+    //     service whose TLS name is `{label}.ops.sys.{domain}` answers on 443
+    //     through the proxy - a `:port` authority is a different origin and a
+    //     different certificate identity.
+    //  2. It pins the probe to ONE instance. Captain's probe reaches the
+    //     instance directly (the `.resolve()` below), so the authority must be
+    //     the stable service name for the connection to stay reusable across a
+    //     respawn - a port in the URL changes the origin on every restart, which
+    //     both defeats the pooled client and makes the probe look like a
+    //     different service to anything that keys on origin.
+    //
+    // The transport is still pinned to this instance by `.resolve(sni_host,
+    // socket_addr)`; the port lives in the socket address, not in the URL. For
+    // plain-HTTP health endpoints there is no TLS name to resolve, so those
+    // legitimately keep the explicit authority.
     let url = if use_http {
         format!("http://{local_ip}:{local_port}{health_path}")
     } else {
-        format!("https://{sni_host}:{local_port}{health_path}")
+        format!("https://{sni_host}{health_path}")
     };
 
     // Cached probe client per target (see module doc). The cache key pins
